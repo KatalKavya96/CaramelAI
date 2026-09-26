@@ -43,7 +43,10 @@ describe("model response schema", () => {
     expect(parseModelDecision("```json\n{\"action\":{\"type\":\"inspect_diff\"}}\n```")).toEqual({
       action: { type: "inspect_diff" },
     });
-    expect(() => parseModelDecision("before ```json\n{}\n``` after")).toThrow("valid JSON");
+    // Fenced JSON embedded in prose is now extracted — {} is valid JSON but missing 'action'
+    expect(() => parseModelDecision("before ```json\n{}\n``` after")).toThrow("action");
+    // Truly unparseable text still throws
+    expect(() => parseModelDecision("this is just plain text with no JSON at all")).toThrow("valid JSON");
   });
 
   test("normalizes bounded provider variants before validation", () => {

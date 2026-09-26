@@ -256,7 +256,7 @@ describe("autonomous agent vertical slice", () => {
     });
 
     expect(result.status).toBe("partial");
-    expect(result.metrics.modelCalls).toBe(2);
+    expect(result.metrics.modelCalls).toBe(1); // Invalid response was refunded from budget
     expect(model.requests[1]?.messages.at(-1)?.content).toContain("prior response was invalid");
   });
 

@@ -319,6 +319,7 @@ export async function runAutonomousTask(
   let commandsRun = 0;
   let stagnationInterventions = 0;
   let unchangedExplorationSteps = 0;
+  let consecutiveInvalidResponses = 0;
   let verificationReserveActivations = 0;
   let reserveActive = false;
   let verificationCommands = 0;
@@ -399,8 +400,12 @@ export async function runAutonomousTask(
       failures.push(failure);
       memory.recordFailure(failure);
       if (modelError.kind === "invalid_response" && modelCalls < options.maxModelCalls) {
-        memory.recordInvalidResponse(modelError.message);
-        continue;
+        consecutiveInvalidResponses += 1;
+        if (consecutiveInvalidResponses <= 3) {
+          modelCalls -= 1; // Refund the call — invalid JSON shouldn't exhaust the budget
+          memory.recordInvalidResponse(modelError.message);
+          continue;
+        }
       }
       if (modelError.retryable && modelCalls < options.maxModelCalls) {
         memory.recordGuidance(`The prior provider call failed transiently: ${modelError.message}. Continue from the latest observed state with one valid structured action.`);
@@ -411,6 +416,7 @@ export async function runAutonomousTask(
       break;
     }
 
+    consecutiveInvalidResponses = 0; // Reset on successful parse
     const { decision } = turn;
     await events.write("model_decision", decision);
     memory.recordDecision(decision);

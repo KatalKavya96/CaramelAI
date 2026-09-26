@@ -54,13 +54,14 @@ export class DeepSeekTransport implements ModelTransport {
         thinking: { type: "enabled" },
         reasoning_effort: this.reasoningEffort,
         response_format: { type: "json_object" },
+        temperature: 0.0,
         stream: false,
       }, { signal });
       if (typeof response !== "object" || response === null || !("choices" in response)) {
         throw new ModelTransportError("permanent", "DeepSeek returned an invalid chat response.");
       }
       const result = response as {
-        choices: Array<{ message?: { content?: unknown } }>;
+        choices: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
       const promptTokens = result.usage?.prompt_tokens;
@@ -69,7 +70,9 @@ export class DeepSeekTransport implements ModelTransport {
       const usage = promptTokens === undefined || completionTokens === undefined || totalTokens === undefined
         ? undefined
         : { inputTokens: promptTokens, outputTokens: completionTokens, totalTokens };
-      return { output: textContent(result.choices[0]?.message?.content), usage };
+      const message = result.choices[0]?.message;
+      const content = message?.content;
+      return { output: textContent(content), usage };
     } catch (error) {
       if (error instanceof ModelTransportError) throw error;
       throw transportError(error);

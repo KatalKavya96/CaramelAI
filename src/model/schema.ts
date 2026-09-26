@@ -18,14 +18,43 @@ function record(value: unknown, location: string): Record<string, unknown> {
   return value;
 }
 
+function extractBalancedJson(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  return null;
+}
+
 function decodeJson(value: string): unknown {
   const trimmed = value.trim();
-  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(trimmed);
-  try {
-    return JSON.parse(fenced?.[1] ?? trimmed);
-  } catch {
-    throw new ModelResponseValidationError("Model output must be valid JSON.");
+
+  // 1. Try direct parse (ideal case)
+  try { return JSON.parse(trimmed); } catch { /* continue */ }
+
+  // 2. Try extracting from markdown fenced blocks (``` or ```json or ```JSON)
+  const fenced = /```(?:json)?\s*\n([\s\S]*?)\n```/i.exec(trimmed);
+  if (fenced?.[1]) {
+    try { return JSON.parse(fenced[1].trim()); } catch { /* continue */ }
   }
+
+  // 3. Try extracting the first balanced JSON object from the text
+  const extracted = extractBalancedJson(trimmed);
+  if (extracted !== null) {
+    try { return JSON.parse(extracted); } catch { /* continue */ }
+  }
+
+  throw new ModelResponseValidationError("Model output must be valid JSON.");
 }
 
 function normalizeAction(response: Record<string, unknown>): unknown {
