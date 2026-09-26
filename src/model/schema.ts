@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ModelAction, ModelDecision, ModelUsage } from "./types";
 
 export class ModelResponseValidationError extends Error {
@@ -6,6 +7,101 @@ export class ModelResponseValidationError extends Error {
     this.name = "ModelResponseValidationError";
   }
 }
+
+export const ListFilesActionSchema = z.object({
+  type: z.literal("list_files"),
+  path: z.string().min(1).optional(),
+  maxDepth: z.number().int().positive().optional(),
+});
+
+export const SearchActionSchema = z.object({
+  type: z.literal("search"),
+  query: z.string().min(1, "action.query must be a non-empty string."),
+  path: z.string().min(1).optional(),
+  maxResults: z.number().int().positive().optional(),
+});
+
+export const ReadFileActionSchema = z.object({
+  type: z.literal("read_file"),
+  path: z.string().min(1, "action.path must be a non-empty string."),
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+}).refine(
+  (data) => data.startLine === undefined || data.endLine === undefined || data.endLine >= data.startLine,
+  { message: "action.endLine must be greater than or equal to action.startLine." },
+);
+
+export const ApplyPatchActionSchema = z.object({
+  type: z.literal("apply_patch"),
+  patch: z.string().min(1, "action.patch must be a non-empty string."),
+});
+
+export const ReplaceTextActionSchema = z.object({
+  type: z.literal("replace_text"),
+  path: z.string().min(1, "action.path must be a non-empty string."),
+  search: z.string().min(1, "action.search must be a non-empty string."),
+  replacement: z.string({ message: "action.replacement must be a string." }),
+});
+
+export const ReplaceFileActionSchema = z.object({
+  type: z.literal("replace_file"),
+  path: z.string().min(1, "action.path must be a non-empty string."),
+  content: z.string({ message: "action.content must be a string." }),
+});
+
+export const CreateCheckpointActionSchema = z.object({
+  type: z.literal("create_checkpoint"),
+  label: z.string().min(1, "action.label must be a non-empty string."),
+});
+
+export const RestoreCheckpointActionSchema = z.object({
+  type: z.literal("restore_checkpoint"),
+  checkpointId: z.string().min(1, "action.checkpointId must be a non-empty string."),
+});
+
+export const RunCommandActionSchema = z.object({
+  type: z.literal("run_command"),
+  command: z.string().min(1, "action.command must be a non-empty string."),
+  purpose: z.enum(["setup", "agent", "verification"], {
+    message: "action.purpose must be setup, agent, or verification.",
+  }).optional(),
+  cwd: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+});
+
+export const InspectDiffActionSchema = z.object({
+  type: z.literal("inspect_diff"),
+});
+
+export const FinishActionSchema = z.object({
+  type: z.literal("finish"),
+  summary: z.string({ message: "action.summary must be a string." }),
+});
+
+export const ModelActionSchema = z.discriminatedUnion("type", [
+  ListFilesActionSchema,
+  SearchActionSchema,
+  ReadFileActionSchema,
+  ApplyPatchActionSchema,
+  ReplaceTextActionSchema,
+  ReplaceFileActionSchema,
+  CreateCheckpointActionSchema,
+  RestoreCheckpointActionSchema,
+  RunCommandActionSchema,
+  InspectDiffActionSchema,
+  FinishActionSchema,
+]);
+
+export const ModelDecisionSchema = z.object({
+  intent: z.string().optional(),
+  action: ModelActionSchema,
+});
+
+export const ProviderUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

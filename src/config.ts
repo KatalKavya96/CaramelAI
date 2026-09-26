@@ -26,6 +26,7 @@ export interface RunConfig {
   model: string;
   reasoningEffort?: DeepSeekReasoningEffort;
   modelScriptPath?: string;
+  planMode: boolean;
   repositoryMapEnabled: boolean;
   colorEnabled: boolean;
   budgets: {
@@ -68,6 +69,7 @@ interface RunArguments {
   reasoningEffort?: string;
   provider?: string;
   repositoryMap?: string;
+  plan?: string;
   color?: string;
 }
 
@@ -98,6 +100,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--reasoning-effort", "reasoningEffort"],
   ["--provider", "provider"],
   ["--repository-map", "repositoryMap"],
+  ["--plan", "plan"],
   ["--color", "color"],
 ]);
 
@@ -275,6 +278,11 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       : provider === "qwen"
         ? env.QWEN_MODEL?.trim() || "qwen-plus"
         : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2"),
+    planMode: args.plan === "enabled" || args.plan === "true"
+      ? true
+      : args.plan === undefined || args.plan === "disabled" || args.plan === "false"
+        ? false
+        : (() => { throw new ConfigurationError("--plan must be enabled or disabled."); })(),
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

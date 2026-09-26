@@ -98,4 +98,40 @@ describe("model response schema", () => {
       parseProviderUsage({ inputTokens: 1, outputTokens: -1, totalTokens: 0 }),
     ).toThrow("non-negative integer");
   });
+
+  test("validates model decisions with Zod schema", () => {
+    const { ModelDecisionSchema } = require("../src/model");
+    const valid = ModelDecisionSchema.safeParse({
+      intent: "read file",
+      action: { type: "read_file", path: "src/main.ts", startLine: 1, endLine: 50 },
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = ModelDecisionSchema.safeParse({
+      action: { type: "unknown_type" },
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  test("validates plan mode responses with Zod schema", () => {
+    const { PlanResponseSchema, parsePlanResponse } = require("../src/agent");
+    const validPlan = {
+      summary: "Refactor database migrations to use transactions.",
+      questions: [
+        {
+          question: "Which migration runner should be used?",
+          options: ["Knex.js (recommended)", "Prisma", "Raw SQL"],
+          defaultIndex: 0,
+          allowCustom: true,
+        },
+      ],
+    };
+    const parsed = PlanResponseSchema.safeParse(validPlan);
+    expect(parsed.success).toBe(true);
+
+    const fromJson = parsePlanResponse(JSON.stringify(validPlan));
+    expect(fromJson.summary).toBe(validPlan.summary);
+    expect(fromJson.questions.length).toBe(1);
+    expect(fromJson.questions[0].options[0]).toBe("Knex.js (recommended)");
+  });
 });

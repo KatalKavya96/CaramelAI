@@ -3,7 +3,15 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { DEFAULT_BUDGETS } from "./config";
 import { normalizeIssueUrl } from "./issue";
-import { box, renderSplash, type SelectChoice, type TerminalSelector } from "./tui";
+import {
+  box,
+  planQuestionToSelectChoices,
+  renderPlanApproval,
+  renderPlanSummary,
+  renderSplash,
+  type SelectChoice,
+  type TerminalSelector,
+} from "./tui";
 
 export type TerminalPrompt = (question: string, defaultValue?: string) => string | null;
 
@@ -217,6 +225,16 @@ export function collectInteractiveRunArguments(options: {
   const maxMinutes = answer(options.ask, "Maximum minutes", String(DEFAULT_BUDGETS.maxMinutes));
   const output = answer(options.ask, "Output directory (blank = automatic)");
 
+  const modeChoices: SelectChoice[] = [
+    { label: "Execute", value: "execute", hint: "run the agent immediately" },
+    { label: "Plan", value: "plan", hint: "agent proposes a plan with questions first" },
+  ];
+  const selectedMode = options.select?.("Mode", modeChoices, {
+    defaultIndex: 0,
+    help: "Use ↑/↓ or j/k. Press Enter to choose execution mode.",
+  }) ?? answer(options.ask, "Mode (execute/plan)", "execute");
+  const planMode = selectedMode.trim().toLowerCase() === "plan";
+
   const taskArguments = normalizedTaskInput.startsWith("@")
     ? ["--task-file", normalizedTaskInput.slice(1)]
     : /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/.test(normalizedTaskInput)
@@ -232,6 +250,7 @@ export function collectInteractiveRunArguments(options: {
     "--max-model-calls", maxModelCalls,
     "--max-minutes", maxMinutes,
     ...(provider === "deepseek" ? ["--reasoning-effort", "high"] : []),
+    ...(planMode ? ["--plan", "enabled"] : []),
     ...(output === "" ? [] : ["--output", output]),
   ];
 
@@ -242,6 +261,7 @@ export function collectInteractiveRunArguments(options: {
     `Model: ${model}`,
     `Repository map: ${repositoryMap}`,
     `Limits: ${maxSteps} steps, ${maxModelCalls} model calls, ${maxMinutes} minutes`,
+    `Mode: ${planMode ? "Plan → Execute" : "Direct Execute"}`,
     `Output: ${output || "automatic temporary directory"}`,
     `API key: loaded from ${credentialName}`,
   ], { color }));

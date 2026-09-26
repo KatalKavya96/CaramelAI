@@ -81,7 +81,7 @@ describe("interactive run wizard", () => {
 
   test("can be cancelled before execution", async () => {
     const repo = await gitRepo();
-    const answers = ["", "1", "", "", "https://github.com/o/r/issues/12", "", "", "", "", "", "n"];
+    const answers = ["", "1", "", "", "https://github.com/o/r/issues/12", "", "", "", "", "", "", "n"];
     expect(() => collectInteractiveRunArguments({
       ask: () => answers.shift() ?? null,
       write: () => {},
@@ -110,8 +110,28 @@ describe("interactive run wizard", () => {
       },
     });
 
-    expect(selected).toEqual(["Paste custom repository path…", "DeepSeek", "deepseek-flash"]);
+    expect(selected).toEqual(["Paste custom repository path…", "DeepSeek", "deepseek-flash", "Execute"]);
     expect(argv.slice(0, 2)).toEqual(["--repo", custom]);
+  });
+
+  test("lets arrow-key users choose Plan mode", async () => {
+    const repo = await gitRepo();
+    const answers = ["", "1", "https://github.com/o/r/issues/12", "", "", "", "", "", "y"];
+    const argv = collectInteractiveRunArguments({
+      ask: () => answers.shift() ?? null,
+      write: () => {},
+      cwd: repo,
+      env: { DEEPSEEK_API_KEY: "secret" },
+      select: (title, choices) => {
+        if (title === "Mode") {
+          return choices.find((item) => item.value === "plan")?.value ?? null;
+        }
+        return choices[0]?.value ?? null;
+      },
+    });
+
+    expect(argv).toContain("--plan");
+    expect(argv).toContain("enabled");
   });
 
   test("discovers nearby repositories and rejects non-git paths", async () => {

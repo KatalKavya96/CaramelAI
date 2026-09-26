@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@openrouter/sdk": "1.3.32",
-    "openai": "^7.23.0"
+    "openai": "^7.23.0",
+    "zod": "^4.6.5"
   }
 }

@@ -2,15 +2,30 @@
 
 import { readFile } from "node:fs/promises";
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
-import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
-import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "./model";
+import {
+  createAgentEventRenderer,
+  formatPlanContext,
+  generatePlanRaw,
+  loadFakeModelScript,
+  runAutonomousTask,
+  type AgentPlan,
+  type PlanAnswer,
+} from "./agent";
+import { createDeepSeekModel, createOpenRouterModel, createQwenModel, DEEPSEEK_BASE_URL } from "./model";
 import { fetchGitHubIssueTask, type IssueFetcher } from "./issue";
 import {
   collectInteractiveRunArguments,
   InteractiveRunCancelled,
   type TerminalPrompt,
 } from "./interactive";
-import { createArrowKeySelector, createTuiEventRenderer, renderRunSummary } from "./tui";
+import {
+  createArrowKeySelector,
+  createTuiEventRenderer,
+  planQuestionToSelectChoices,
+  renderPlanApproval,
+  renderPlanSummary,
+  renderRunSummary,
+} from "./tui";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -43,6 +58,7 @@ Options:
   --provider <name>          openrouter, deepseek, or qwen (default: inferred from credentials)
   --model <id>               Provider model (DeepSeek default: deepseek-flash)
   --reasoning-effort <level> DeepSeek reasoning effort: low, medium, high (default: medium)
+  --plan <enabled|disabled>  Enable Plan mode: agent proposes plan with questions first (default: disabled)
   --help                     Show this help
 `;
 
@@ -171,6 +187,83 @@ export async function runCli(
       repositoryMapEnabled: config.repositoryMapEnabled,
     };
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
+
+    // --- Plan Mode ---
+    let planContext = "";
+    if (config.planMode && interactive && config.apiKey !== undefined) {
+      const select = createArrowKeySelector({ color: config.colorEnabled });
+
+      stdout("\n⏳ Generating plan from issue analysis...\n");
+      const baseUrl = config.provider === "deepseek" ? DEEPSEEK_BASE_URL
+        : config.provider === "qwen" ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        : "https://openrouter.ai/api/v1";
+
+      const planResult = await generatePlanRaw({
+        apiKey: config.apiKey,
+        baseUrl,
+        model: config.model,
+        task: config.task,
+        repositoryContext: { repoPath: config.repoPath },
+      });
+
+      if (planResult.questions.length > 0) {
+        stdout(renderPlanSummary(planResult, { color: config.colorEnabled }));
+
+        const answers: PlanAnswer[] = [];
+        const CUSTOM_VALUE = "__plan_custom_answer__";
+
+        for (const question of planResult.questions) {
+          const choices = planQuestionToSelectChoices(question);
+          const selectedAnswer = select(
+            question.question,
+            choices,
+            {
+              defaultIndex: question.defaultIndex ?? 0,
+              help: "Use ↑/↓ or j/k. Press Enter to select. Last option lets you type a custom answer.",
+            },
+          );
+
+          let finalAnswer: string;
+          let isCustom = false;
+
+          if (selectedAnswer === CUSTOM_VALUE || selectedAnswer === null) {
+            const customInput = ask("Your answer");
+            finalAnswer = customInput?.trim() || choices[question.defaultIndex ?? 0]?.value || "Follow repo conventions";
+            isCustom = finalAnswer !== choices[question.defaultIndex ?? 0]?.value;
+          } else {
+            finalAnswer = selectedAnswer;
+          }
+
+          answers.push({
+            question: question.question,
+            answer: finalAnswer,
+            isCustom,
+          });
+        }
+
+        const plan: AgentPlan = {
+          summary: planResult.summary,
+          questions: planResult.questions,
+          answers,
+        };
+
+        stdout(renderPlanApproval(plan, { color: config.colorEnabled }));
+        const planApproval = ask("Proceed with this plan? (Y/n)", "Y")?.trim().toLowerCase() ?? "";
+        if (planApproval !== "y" && planApproval !== "yes" && planApproval !== "") {
+          stdout("Plan rejected. Run cancelled.");
+          return 0;
+        }
+
+        planContext = formatPlanContext(plan);
+      } else {
+        stdout("\n📋 No clarifying questions needed — proceeding with direct execution.\n");
+      }
+    }
+
+    // Inject plan context into the task
+    if (planContext !== "") {
+      runOptions.task = `${runOptions.task}\n\n${planContext}`;
+    }
     const result = await runAutonomousTask(runOptions, {
       model,
       onEvent: interactive

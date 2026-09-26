@@ -4,6 +4,25 @@ import type { DiscoveredCheck, VerificationEvidence } from "../verification";
 import type { RecoverySummary } from "../recovery";
 import type { TaskMemorySnapshot } from "../memory";
 
+export interface PlanQuestion {
+  question: string;
+  options: string[];
+  defaultIndex?: number | undefined;
+  allowCustom: boolean;
+}
+
+export interface PlanAnswer {
+  question: string;
+  answer: string;
+  isCustom: boolean;
+}
+
+export interface AgentPlan {
+  summary: string;
+  questions: PlanQuestion[];
+  answers: PlanAnswer[];
+}
+
 export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed";
 
 export type AgentEventType =
