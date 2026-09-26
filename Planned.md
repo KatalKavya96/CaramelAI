@@ -388,6 +388,307 @@ Successful completion must be evidence-based.
 
 Goal: make Caramél easy to understand, configure, and operate without weakening headless/evaluator execution.
 
+
+## 1.0 Mandatory TUI interaction correctness
+
+The current TUI is intended to be interactive, but arrow-key navigation is not reliable enough. This must be treated as a **functional bug**, not as visual polish.
+
+Do not keep an interactive-looking interface whose controls do not consistently work.
+
+The TUI must be made genuinely usable before further visual decoration.
+
+### Required behavior
+
+All selectable screens must support predictable keyboard navigation:
+
+```text
+↑ / ↓        move vertically
+← / →        move horizontally where the layout requires it
+Enter        activate selected item
+Esc          go back / cancel safely
+Ctrl+C       exit safely and restore terminal state
+1–9          optional direct shortcuts where displayed
+Tab          optional next-item navigation where appropriate
+Shift+Tab    optional previous-item navigation
+```
+
+Displayed keyboard hints must match the controls that actually work.
+
+### Navigation model
+
+Do not implement each screen with independent ad-hoc key parsing.
+
+Create a reusable TUI input/navigation layer responsible for:
+
+```text
+key decoding
+selection state
+focus movement
+screen redraw
+activation
+back/cancel handling
+terminal cleanup
+TTY capability detection
+```
+
+Suggested separation:
+
+```text
+src/tui/
+├── input.ts
+├── navigation.ts
+├── selectors.ts
+├── screen.ts
+├── theme.ts
+└── views/
+```
+
+The exact structure may differ, but input handling must not remain duplicated across screens.
+
+### Arrow-key decoding
+
+Terminal arrow keys arrive as escape sequences and may be received in different chunk boundaries depending on runtime/terminal behavior.
+
+The implementation must not assume that every keypress always arrives as one perfectly formed string.
+
+Use a robust decoder/state machine for sequences such as:
+
+```text
+ESC [ A    Up
+ESC [ B    Down
+ESC [ C    Right
+ESC [ D    Left
+```
+
+Support the runtime/terminal combinations used by the project, especially macOS Terminal/iTerm-style environments and the prescribed evaluator environment.
+
+Avoid fragile checks that only compare a single `readSync()` result to an exact sequence without handling partial/combined input.
+
+### Selection rules
+
+Selection behavior must be deterministic.
+
+For a one-dimensional list:
+
+```text
+↑ = previous
+↓ = next
+```
+
+For a horizontal menu:
+
+```text
+← = previous
+→ = next
+```
+
+For grids:
+
+- represent items using row/column coordinates,
+- move to the nearest valid item in the requested direction,
+- define whether edges clamp or wrap,
+- use the same rule consistently.
+
+Do not map all four arrow keys to "next" or "previous" simply to make them appear functional.
+
+### Focus and selected state
+
+Every interactive screen must have exactly one clear selected/focused element unless the screen intentionally has none.
+
+The selected state must be visually obvious using the Caramél yellow/gold theme.
+
+Rendering and selection state should be separate:
+
+```text
+state
+→ render(state)
+```
+
+Do not infer state from terminal output.
+
+### Input loop architecture
+
+Use one bounded event loop per active interactive screen.
+
+Conceptually:
+
+```text
+initialize terminal
+render screen
+
+while active:
+    key = read/decode key
+    action = map key to navigation command
+    nextState = reduce(currentState, action)
+
+    if state changed:
+        redraw
+
+    if activate:
+        return selected action
+
+    if cancel:
+        return cancelled
+
+finally:
+    restore terminal state
+```
+
+The reducer/navigation logic should be testable without a real terminal.
+
+### Terminal cleanup is mandatory
+
+Every exit path—including:
+
+- Enter/selection,
+- Esc,
+- Ctrl+C,
+- thrown error,
+- cancelled prompt,
+- screen transition,
+
+must restore:
+
+```text
+raw mode
+cursor visibility
+alternate screen state if used
+terminal formatting/reset codes
+```
+
+Use `try/finally`.
+
+The harness must never leave the user's shell with a hidden cursor or raw input enabled.
+
+### Screen redraw
+
+Avoid repeatedly printing complete screens below each other.
+
+Use controlled redraw behavior.
+
+If using an alternate screen buffer:
+
+- enter it once,
+- redraw in place,
+- leave it reliably.
+
+If not using an alternate screen:
+
+- clear/reposition predictably,
+- avoid excessive flicker.
+
+Do not mix multiple incompatible screen-management approaches.
+
+### Interactive vs headless mode
+
+TUI behavior must never break automated evaluation.
+
+When stdin/stdout are not TTYs:
+
+```text
+interactive keyboard loop must not start
+```
+
+Use deterministic non-interactive behavior or the existing CLI argument flow.
+
+Core agent execution must remain independent from the TUI.
+
+### Mouse support is optional
+
+Do not spend priority time on mouse support until keyboard navigation is correct.
+
+Arrow keys + Enter + Esc are mandatory.
+
+### No decorative fake controls
+
+If an item is shown as selectable, it must either:
+
+- work, or
+- be visibly disabled with a reason.
+
+Examples such as:
+
+```text
+Continue
+Recent Runs
+Benchmarks
+Settings
+Tools
+Help
+```
+
+must not be rendered as active buttons if the corresponding behavior does not exist.
+
+### TUI tests are mandatory
+
+Add unit tests for pure navigation behavior.
+
+At minimum test:
+
+```text
+initial selected index
+Up
+Down
+Left
+Right
+edge behavior
+wrap/clamp policy
+Enter activation
+Esc cancellation
+number shortcut selection
+invalid key ignored
+```
+
+Add tests for key decoding:
+
+```text
+complete escape sequence
+partial escape sequence
+multiple keys in one input chunk
+Ctrl+C
+Enter
+```
+
+Add integration-level tests using mocked input/output streams where practical.
+
+### Navigation regression tests
+
+Every time a navigation bug is fixed, add a regression test.
+
+The current arrow-key issue must receive a regression test so it cannot silently return.
+
+### TUI usability completion gate
+
+Do not mark Segment 1 complete until all of the following are true:
+
+```text
+✓ Up/Down work on vertical lists
+✓ Left/Right work on horizontal menus
+✓ Enter activates the visible selection
+✓ Esc safely backs out
+✓ Ctrl+C restores terminal state
+✓ selection is visually obvious
+✓ displayed shortcuts actually work
+✓ terminal state is restored after errors
+✓ non-TTY execution does not hang
+✓ navigation unit tests pass
+✓ interactive regression tests pass
+```
+
+### Priority
+
+This fix belongs at the top of Segment 1:
+
+```text
+1. Repair reusable keyboard input/navigation engine
+2. Add navigation regression tests
+3. Make existing dashboard actually usable
+4. Only then continue visual TUI polish
+```
+
+Visual similarity to the mockup is secondary to reliable interaction.
+
+
 ## 1.1 Dashboard navigation
 
 Create a proper interactive dashboard:
@@ -1861,16 +2162,19 @@ Do not stack large unverified changes.
 7. Evidence explorer
 8. Debug mode
 
-## Priority 3 — UI/input polish
+## Priority 3 — UI/input reliability and polish
 
-1. Dashboard navigation
-2. Better task setup
-3. Recent repositories
-4. Recent runs
-5. Continue flow
-6. Live phase indicator
-7. Live budgets
-8. Compact timeline
+1. **Fix reusable keyboard input/navigation engine**
+2. **Add arrow-key and terminal-state regression tests**
+3. Make current dashboard genuinely interactive
+4. Dashboard navigation
+5. Better task setup
+6. Recent repositories
+7. Recent runs
+8. Continue flow
+9. Live phase indicator
+10. Live budgets
+11. Compact timeline
 
 ## Priority 4 — Benchmark proof
 
@@ -1909,6 +2213,11 @@ When given one segment from this file:
 22. Rerun the exact failing check after each repair before moving on.
 23. Do not finish while verification is stale relative to the current code fingerprint.
 24. Treat final review and final verification as explicit completion gates.
+25. Never ship decorative TUI controls that do not actually work.
+26. Keep keyboard decoding/navigation logic reusable and separate from screen rendering.
+27. Add regression tests for every fixed keyboard-navigation bug.
+28. Always restore terminal raw mode, cursor state, and screen state through `try/finally`.
+29. Keep interactive TUI behavior completely optional for headless/evaluator execution.
 
 ---
 
@@ -1928,3 +2237,2249 @@ A segment is complete only when:
 ✓ no secrets are exposed
 ✓ no fabricated evidence is reported
 ```
+
+---
+
+# SEGMENT 6 — Tool Registry and Skill Registry Architecture
+
+Goal: give Caramél a professional capability layer comparable in structure and discipline to modern coding agents, while keeping behavior deterministic, auditable, secure, and compatible with the existing controller.
+
+The system must make a strong distinction between:
+
+```text
+TOOLS   = deterministic actions against the environment
+SKILLS  = reusable engineering workflows that orchestrate tools
+MODEL   = reasoning and decision-making
+CONTROLLER = policy, state, budgets, orchestration
+MEMORY  = durable task evidence/state
+VERIFICATION = ground truth about whether work actually succeeded
+TUI     = interaction and observability
+```
+
+This separation is mandatory.
+
+Do not implement "skills" as uncontrolled mini-agents with separate hidden state.
+
+Do not expose raw filesystem, raw shell, or raw environment access when a safer bounded tool can exist.
+
+---
+
+# 6.1 Tool Registry — Design Requirements
+
+Create a typed registry for all executable capabilities.
+
+Suggested shape:
+
+```ts
+export interface AgentTool<I, O> {
+  name: string;
+  description: string;
+  category: ToolCategory;
+  risk: ToolRisk;
+  allowedPhases: AgentPhase[];
+  inputSchema: unknown;
+
+  execute(
+    input: I,
+    context: ToolContext,
+  ): Promise<ToolResult<O>>;
+}
+```
+
+Suggested common result:
+
+```ts
+export interface ToolResult<T> {
+  ok: boolean;
+  data?: T;
+  error?: ToolError;
+
+  evidence?: {
+    files?: string[];
+    command?: string;
+    exitCode?: number;
+    durationMs?: number;
+    fingerprint?: string;
+  };
+
+  truncated?: boolean;
+  warnings?: string[];
+}
+```
+
+Every tool should:
+
+- validate input before execution,
+- be bounded,
+- return structured results,
+- produce evidence suitable for reports,
+- avoid leaking secrets,
+- be phase-aware,
+- be risk-classified,
+- be testable independently of the model,
+- never infer success from free-form text,
+- never mutate outside the allowed workspace unless explicitly designed to,
+- keep output size controlled.
+
+Suggested risk classes:
+
+```text
+READ_ONLY
+WORKSPACE_WRITE
+EXECUTION
+STATE_MUTATION
+DESTRUCTIVE
+```
+
+Suggested capability categories:
+
+```text
+REPOSITORY
+SEARCH
+CODE_EDIT
+EXECUTION
+VERIFICATION
+WORKSPACE
+RECOVERY
+REPORTING
+```
+
+---
+
+# 6.2 Core Tool Catalog — Detailed Descriptions
+
+## TOOL: `list_files`
+
+### Purpose
+
+Provide a bounded, structured view of repository files and directories.
+
+### Real-world developer need
+
+Developers often begin unfamiliar work by understanding structure:
+
+```text
+src/
+tests/
+packages/
+apps/
+lib/
+scripts/
+config/
+```
+
+The agent should not recursively dump the entire repository into context.
+
+### Inputs
+
+Possible inputs:
+
+```ts
+{
+  path?: string;
+  depth?: number;
+  includeHidden?: boolean;
+  extensions?: string[];
+  limit?: number;
+}
+```
+
+### Behavior
+
+- normalize and validate path,
+- stay within workspace,
+- ignore excluded directories by default,
+- bound depth and result count,
+- distinguish files/directories,
+- optionally include size/type metadata,
+- avoid returning binary content.
+
+### Typical use cases
+
+```text
+understand project layout
+find likely package boundaries
+locate tests
+find config files
+inspect a newly discovered directory
+```
+
+### Output should include
+
+```text
+relative path
+entry type
+possibly size
+possibly extension
+truncation indicator
+```
+
+### Safety
+
+Must reject:
+
+```text
+../ traversal
+unsafe absolute paths
+host filesystem paths
+secret filesystem locations
+```
+
+### Why it matters
+
+A strong coding agent should inspect structure efficiently instead of wasting tokens reading arbitrary files.
+
+---
+
+## TOOL: `search`
+
+### Purpose
+
+Search repository text, filenames, symbols, error messages, configuration keys, and tests.
+
+### Real-world developer need
+
+Developers routinely search for:
+
+```text
+function names
+error strings
+API routes
+config options
+types/interfaces
+test names
+environment variables
+call sites
+```
+
+### Inputs
+
+```ts
+{
+  query: string;
+  path?: string;
+  mode?: "text" | "filename" | "symbol";
+  caseSensitive?: boolean;
+  extensions?: string[];
+  limit?: number;
+}
+```
+
+### Behavior
+
+- bounded search,
+- prioritize useful results,
+- include line numbers,
+- return short matching context,
+- allow path/ext filtering,
+- optionally rank results.
+
+### Typical use cases
+
+```text
+find implementation for issue wording
+locate error string from failing test
+find all usages of an option
+discover related tests
+find config references
+```
+
+### Output
+
+```text
+file
+line
+match
+small surrounding context
+score/relevance if ranked
+```
+
+### Safety / efficiency
+
+- do not search huge ignored folders,
+- do not expose `.env` contents,
+- cap matches,
+- summarize when many results exist.
+
+---
+
+## TOOL: `read_file`
+
+### Purpose
+
+Read bounded source ranges safely.
+
+### Real-world developer need
+
+Agents need precise context around:
+
+```text
+functions
+classes
+tests
+config sections
+error locations
+```
+
+Reading full large files by default wastes context.
+
+### Inputs
+
+```ts
+{
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  maxChars?: number;
+}
+```
+
+### Behavior
+
+- validate file path,
+- reject binary files,
+- bound output,
+- include line numbers,
+- indicate truncation,
+- support exact snippets.
+
+### Important rule
+
+If the file changed after a previous read, stale cached content must not be treated as current.
+
+### Typical use cases
+
+```text
+inspect implementation
+inspect failing test
+read surrounding compiler error
+verify exact text before patch
+inspect configuration
+```
+
+---
+
+## TOOL: `read_symbol`
+
+### Purpose
+
+Read the most relevant code region for a named function, class, method, variable, interface, type, test, or module symbol.
+
+### Real-world developer need
+
+Developers think in symbols, not just line ranges.
+
+Example:
+
+```text
+"Show me validateToken()"
+"Find UserService.create()"
+"Open the Config interface"
+```
+
+### Behavior
+
+- locate symbol definition,
+- return the symbol body and nearby context,
+- optionally include signature/doc comments,
+- optionally include parent class/module.
+
+### Fallback
+
+If symbol indexing is unavailable:
+
+```text
+symbol search
+→ text search
+→ bounded file read
+```
+
+### Benefits
+
+Reduces search/read round trips and improves localization quality.
+
+---
+
+## TOOL: `find_references`
+
+### Purpose
+
+Find where a symbol, module, route, function, class, or configuration value is used.
+
+### Real-world developer need
+
+Before changing code, developers often need to know:
+
+```text
+who calls this?
+what imports this?
+which tests exercise this?
+is this public API?
+```
+
+### Inputs
+
+```ts
+{
+  symbol: string;
+  path?: string;
+  includeDefinitions?: boolean;
+  limit?: number;
+}
+```
+
+### Behavior
+
+Use the best available mechanism:
+
+```text
+AST/index if available
+language service if cheap
+fallback textual reference search
+```
+
+### Output
+
+```text
+references
+definitions
+importers
+callers where available
+related tests
+```
+
+### Why it matters
+
+This helps prevent accidental API regressions and incomplete multi-file fixes.
+
+---
+
+## TOOL: `repository_map`
+
+### Purpose
+
+Produce a compact ranked map of likely relevant files for the current task.
+
+### Real-world developer need
+
+Large repositories cannot be explored uniformly.
+
+The agent needs a fast first-pass shortlist.
+
+### Inputs
+
+```ts
+{
+  task: string;
+  maxFiles?: number;
+}
+```
+
+### Signals
+
+Use combinations of:
+
+```text
+filename/path match
+task-term content match
+symbol match
+imports
+test links
+directory proximity
+historical relevance if available
+```
+
+### Output
+
+```text
+ranked files
+reason for rank
+matched symbols/terms
+likely related tests
+```
+
+### Important
+
+This is not truth.
+
+The map guides exploration but must not override actual repository evidence.
+
+---
+
+## TOOL: `inspect_diff`
+
+### Purpose
+
+Return the current workspace changes in a structured, bounded form.
+
+### Real-world developer need
+
+Developers continuously inspect diffs to catch:
+
+```text
+unexpected edits
+formatting churn
+test weakening
+debug statements
+dependency changes
+unrelated files
+```
+
+### Inputs
+
+```ts
+{
+  paths?: string[];
+  staged?: boolean;
+  contextLines?: number;
+}
+```
+
+### Output
+
+```text
+changed files
+added/deleted line counts
+diff text
+binary/untracked indicators
+summary
+```
+
+### Additional analysis
+
+Optionally flag:
+
+```text
+large unrelated diff
+test deletions
+new TODO/FIXME
+debug print/logging
+dependency manifest changes
+```
+
+### Mandatory use
+
+Final success requires final diff inspection.
+
+---
+
+## TOOL: `apply_patch`
+
+### Purpose
+
+Apply a bounded patch to existing files.
+
+### Real-world developer need
+
+Precise patching is safer than rewriting entire files.
+
+### Inputs
+
+```ts
+{
+  patch: string;
+}
+```
+
+### Behavior
+
+- apply only inside workspace,
+- detect stale context,
+- fail cleanly on mismatch,
+- return changed files,
+- update workspace fingerprint,
+- invalidate stale verification and read cache.
+
+### Failure behavior
+
+On mismatch:
+
+```text
+do not repeatedly retry same patch
+reread relevant region
+construct fresh patch
+```
+
+### Safety
+
+Reject patches touching:
+
+```text
+outside workspace
+forbidden secret files
+evaluator/reference solution data
+```
+
+---
+
+## TOOL: `replace_text`
+
+### Purpose
+
+Perform a precise text replacement when patch generation is unnecessary.
+
+### Real-world developer need
+
+Useful for:
+
+```text
+renaming a local constant
+small config edits
+single known substitution
+```
+
+### Inputs
+
+```ts
+{
+  path: string;
+  oldText: string;
+  newText: string;
+  expectedOccurrences?: number;
+}
+```
+
+### Behavior
+
+- verify expected match count,
+- fail instead of guessing when ambiguous,
+- update fingerprints/cache,
+- report exact change.
+
+### Safety
+
+Must never silently replace unexpected multiple matches.
+
+---
+
+## TOOL: `replace_file`
+
+### Purpose
+
+Replace full file contents when that is clearly the appropriate operation.
+
+### Real-world developer need
+
+Suitable for:
+
+```text
+small generated config
+new compact files
+major rewrite where diff patch is impractical
+```
+
+### Use sparingly
+
+A mature agent should prefer minimal edits.
+
+### Safeguards
+
+- size limit,
+- workspace boundary,
+- preserve line endings where practical,
+- warn when replacing a large existing file,
+- checkpoint before risky rewrites.
+
+---
+
+## TOOL: `run_command`
+
+### Purpose
+
+Run a bounded command inside the controlled workspace/runner.
+
+### Real-world developer need
+
+Required for:
+
+```text
+build
+test
+typecheck
+lint
+format
+package scripts
+diagnostic commands
+```
+
+### Inputs
+
+```ts
+{
+  command: string;
+  cwd?: string;
+  timeoutMs?: number;
+  purpose: "inspect" | "build" | "test" | "lint" | "format" | "diagnose";
+}
+```
+
+### Mandatory protections
+
+- cwd must be allowed,
+- timeout,
+- output cap,
+- environment filtering,
+- blocked dangerous commands/patterns,
+- no credential dumping,
+- no unrestricted host filesystem access.
+
+### Output
+
+```text
+exit code
+stdout summary
+stderr summary
+duration
+truncated flag
+```
+
+### Important
+
+A shell command's exit code is evidence.
+
+The model's interpretation is not.
+
+---
+
+## TOOL: `run_tests`
+
+### Purpose
+
+Provide a test-focused wrapper above generic command execution.
+
+### Real-world developer need
+
+Testing is important enough to deserve structured semantics.
+
+### Inputs
+
+```ts
+{
+  targets?: string[];
+  scope?: "targeted" | "related" | "full";
+  timeoutMs?: number;
+}
+```
+
+### Behavior
+
+- select repository-native test command,
+- run requested targets,
+- parse test counts where possible,
+- capture failed test names,
+- store evidence fingerprint,
+- classify outcome.
+
+### Output
+
+```ts
+{
+  status: "passed" | "failed" | "unavailable";
+  passed?: number;
+  failed?: number;
+  skipped?: number;
+  failingTests?: string[];
+  command: string;
+  fingerprint: string;
+}
+```
+
+### Why separate from `run_command`
+
+This enables:
+
+```text
+verification gates
+structured reports
+test-impact logic
+failure-driven repair
+```
+
+---
+
+## TOOL: `discover_checks`
+
+### Purpose
+
+Discover repository-defined verification commands.
+
+### Real-world developer need
+
+Different projects use different workflows.
+
+Examples:
+
+```text
+package.json scripts
+Makefile targets
+pyproject
+tox
+Cargo
+Go
+Gradle
+Maven
+CI workflows
+```
+
+### Output
+
+Possible categories:
+
+```text
+test
+typecheck
+lint
+build
+format
+integration
+```
+
+### Rule
+
+Prefer repository-native checks over invented commands.
+
+### Example
+
+Instead of assuming:
+
+```text
+npm test
+```
+
+discover that the project actually expects:
+
+```text
+bun test
+bun run typecheck
+make contract
+```
+
+---
+
+## TOOL: `workspace_status`
+
+### Purpose
+
+Describe current workspace state.
+
+### Real-world developer need
+
+The agent must know:
+
+```text
+what changed?
+what was pre-existing?
+what is untracked?
+did a dependency file change?
+```
+
+### Output
+
+```text
+modified files
+added files
+deleted files
+untracked files
+baseline modifications
+agent modifications
+fingerprint
+```
+
+### Why important
+
+Prevents accidental overwriting of unrelated developer work.
+
+---
+
+## TOOL: `create_checkpoint`
+
+### Purpose
+
+Create a recoverable workspace snapshot before risky changes.
+
+### Real-world developer need
+
+Useful before:
+
+```text
+multi-file refactors
+dependency changes
+large rewrites
+uncertain repairs
+```
+
+### Output
+
+```text
+checkpoint ID
+fingerprint
+changed files
+timestamp
+```
+
+### Important
+
+Checkpoints are recovery mechanisms, not commits unless intentionally implemented that way.
+
+---
+
+## TOOL: `restore_checkpoint`
+
+### Purpose
+
+Restore a known workspace state after a bad branch of work.
+
+### Real-world developer need
+
+Autonomous agents must recover from failed approaches without accumulating damage.
+
+### Rules
+
+- restore only agent-owned workspace changes,
+- do not erase unrelated user changes,
+- record restoration as an event,
+- invalidate stale verification,
+- explain why restore occurred.
+
+---
+
+## TOOL: `get_failure_summary`
+
+### Purpose
+
+Convert raw build/test/tool failure output into structured diagnostic evidence.
+
+### Real-world developer need
+
+Raw logs are noisy.
+
+The model needs:
+
+```text
+what failed
+where
+why it may matter
+which test/symbol/file is implicated
+```
+
+### Inputs
+
+```ts
+{
+  commandResultId: string;
+}
+```
+
+### Output
+
+```text
+failure category
+primary error
+file/line locations
+failing tests
+stack frame highlights
+compiler diagnostics
+concise relevant log excerpt
+```
+
+### Important
+
+This tool should summarize deterministic output.
+
+It should not invent root cause.
+
+Root-cause reasoning belongs to a debugging skill/model step.
+
+---
+
+## TOOL: `finish`
+
+### Purpose
+
+Request task completion.
+
+### Important
+
+This is not a normal unrestricted tool.
+
+It must be guarded by controller verification policy.
+
+### Controller should reject finish when:
+
+```text
+verification is stale
+known failures remain
+required diff review not done
+task requirements not addressed
+minimum completion evidence missing
+```
+
+### Output
+
+```text
+accepted
+or
+rejected with missing completion gates
+```
+
+---
+
+# 6.3 Optional/Advanced Tools
+
+These can be added after the core tools are stable.
+
+## `symbol_index`
+
+Build/query symbol index for large repositories.
+
+## `dependency_graph`
+
+Expose import/package relationships.
+
+## `test_impact`
+
+Return tests likely affected by changed files/symbols.
+
+## `read_log`
+
+Read a bounded stored command log without rerunning commands.
+
+## `artifact_write`
+
+Write report/debug artifacts into the run directory.
+
+## `replay_events`
+
+Load recorded run events for TUI replay mode.
+
+Do not add optional tools merely for UI display.
+
+---
+
+# 6.4 Skill Registry — Design Requirements
+
+Skills are reusable engineering strategies.
+
+A skill should:
+
+- have a clear input/output contract,
+- operate through approved tools,
+- use current controller state,
+- remain bounded,
+- update evidence/hypotheses/plan state where relevant,
+- avoid maintaining secret independent memory,
+- not bypass policy,
+- not execute arbitrary raw actions outside the tool layer.
+
+Suggested interface:
+
+```ts
+export interface Skill<I, O> {
+  name: string;
+  description: string;
+
+  canRun(context: SkillContext): boolean;
+
+  run(
+    input: I,
+    context: SkillContext,
+  ): Promise<O>;
+}
+```
+
+Suggested context:
+
+```ts
+export interface SkillContext {
+  tools: AgentTools;
+  memory: TaskMemory;
+  state: AgentState;
+  config: AgentConfig;
+  evidence: EvidenceStore;
+}
+```
+
+Skills may use the model for reasoning, but all environmental effects must go through tools.
+
+---
+
+# 6.5 Core Skill Catalog — Detailed Descriptions
+
+## SKILL: `repo_understanding`
+
+### Purpose
+
+Rapidly understand an unfamiliar repository before editing.
+
+### Real-world developer situation
+
+A developer receives:
+
+```text
+"Fix upload retries"
+```
+
+but knows nothing about:
+
+```text
+language
+package layout
+test framework
+architecture
+repository conventions
+```
+
+The skill should establish enough context to work safely.
+
+### Inputs
+
+```text
+task
+repository root
+known repository map if available
+```
+
+### Workflow
+
+```text
+1. inspect repo instructions
+2. inspect manifests/build files
+3. inspect top-level structure
+4. identify likely application/package boundaries
+5. identify testing conventions
+6. identify relevant implementation areas
+7. identify likely related tests
+8. summarize only actionable findings
+```
+
+### Tools
+
+```text
+list_files
+search
+read_file
+repository_map
+discover_checks
+```
+
+### Output
+
+```ts
+{
+  architectureSummary: string[];
+  relevantFiles: string[];
+  likelyTests: string[];
+  repoInstructions: string[];
+  verificationCommands: string[];
+  risks: string[];
+}
+```
+
+### Completion criteria
+
+Stop exploring when enough evidence exists to produce an actionable plan.
+
+Do not attempt to "understand the whole repository."
+
+---
+
+## SKILL: `issue_localization`
+
+### Purpose
+
+Determine where an issue most likely originates.
+
+### Real-world developer situation
+
+Issue wording often describes symptoms rather than implementation:
+
+```text
+"User gets logged out after refresh"
+```
+
+The bug may be in:
+
+```text
+token parsing
+middleware
+cache
+API client
+cookie handling
+```
+
+### Workflow
+
+```text
+extract task concepts
+→ search symbols/error strings
+→ inspect likely implementation
+→ find references/importers
+→ inspect related tests
+→ rank candidate locations
+```
+
+### Tools
+
+```text
+repository_map
+search
+read_symbol
+read_file
+find_references
+```
+
+### Output
+
+```text
+primary candidate
+secondary candidates
+supporting evidence
+related tests
+unknowns
+```
+
+### Important
+
+Do not output fake numeric confidence.
+
+Use evidence-backed ranking.
+
+---
+
+## SKILL: `plan_change`
+
+### Purpose
+
+Turn repository understanding into a short executable implementation plan.
+
+### Real-world developer need
+
+Good plans reduce unnecessary edits and context switching.
+
+### Plan style
+
+Prefer:
+
+```text
+1. reproduce/inspect failing behavior
+2. inspect validation path
+3. add/update regression test
+4. patch implementation
+5. rerun targeted test
+6. run broader verification
+7. inspect diff
+```
+
+Avoid long essays.
+
+### Plan state
+
+Every item must support:
+
+```text
+pending
+in_progress
+verified
+blocked
+superseded
+```
+
+### Important
+
+Plans are provisional and must change when evidence changes.
+
+---
+
+## SKILL: `implement_change`
+
+### Purpose
+
+Make the smallest safe implementation change consistent with repository conventions.
+
+### Workflow
+
+```text
+confirm active plan item
+→ confirm relevant file is current/not stale
+→ checkpoint if risky
+→ inspect exact region
+→ apply minimal edit
+→ inspect diff
+→ update changed-file/fingerprint state
+```
+
+### Tools
+
+```text
+read_file
+read_symbol
+apply_patch
+replace_text
+replace_file
+create_checkpoint
+inspect_diff
+```
+
+### Developer expectations
+
+The skill should:
+
+- preserve local naming/style,
+- avoid unrelated cleanup,
+- avoid unnecessary dependencies,
+- avoid rewriting whole files,
+- not modify tests solely to silence failures,
+- surface public API changes explicitly.
+
+---
+
+## SKILL: `debug_failure`
+
+### Purpose
+
+Diagnose failed builds/tests/runtime checks using evidence.
+
+### Real-world developer situation
+
+After a patch:
+
+```text
+test_expired_token
+Expected 401
+Received 500
+```
+
+A weak agent simply retries.
+
+A strong debugging skill:
+
+```text
+reads failing test
+reads implicated source
+compares expected/actual path
+updates hypothesis
+proposes minimal repair
+```
+
+### Inputs
+
+```text
+failed verification
+current diff
+active hypothesis
+recent edits
+related files
+```
+
+### Tools
+
+```text
+get_failure_summary
+read_file
+read_symbol
+find_references
+search
+inspect_diff
+```
+
+### Output
+
+```text
+failure classification
+likely cause
+supporting evidence
+rejected assumptions
+recommended next repair
+specific verification to rerun
+```
+
+### Important
+
+This skill diagnoses.
+
+It should not silently edit before understanding the failure.
+
+---
+
+## SKILL: `recovery`
+
+### Purpose
+
+Choose a different engineering strategy when the current path fails.
+
+### Situations
+
+```text
+patch mismatch
+type error
+test assertion
+timeout
+setup failure
+stagnation
+bad model response
+repeated unsuccessful repair
+```
+
+### Strategy examples
+
+#### Patch mismatch
+
+```text
+reread region
+discard stale patch
+build new patch against current text
+```
+
+#### Compiler error
+
+```text
+parse diagnostic
+inspect exact file/line
+repair local symbol
+rerun typecheck
+```
+
+#### Assertion failure
+
+```text
+inspect test expectation
+inspect implementation path
+update hypothesis
+repair minimal behavior
+rerun failing test
+```
+
+#### Stagnation
+
+```text
+summarize failed strategy
+mark hypothesis rejected
+restore checkpoint if useful
+return to targeted exploration
+```
+
+### Output
+
+```text
+chosen strategy
+why current strategy failed
+state/hypothesis changes
+next action
+```
+
+---
+
+## SKILL: `verification`
+
+### Purpose
+
+Determine whether the implementation actually works.
+
+### Real-world developer need
+
+Verification should mirror how strong developers work:
+
+```text
+cheap relevant check first
+→ broader confidence
+→ final review
+```
+
+### Workflow
+
+```text
+discover checks
+→ select affected tests
+→ run targeted tests
+→ interpret results
+→ run broader checks as appropriate
+→ record evidence fingerprint
+```
+
+### Tools
+
+```text
+discover_checks
+run_tests
+run_command
+workspace_status
+inspect_diff
+```
+
+### Output
+
+```text
+verification level
+checks run
+results
+failing tests
+stale/not stale
+evidence fingerprint
+recommended next step
+```
+
+### Verification levels
+
+Suggested:
+
+```text
+NONE
+TARGETED
+RELATED
+PROJECT_LEVEL
+FULL
+```
+
+Do not equate a targeted pass with full verification.
+
+---
+
+## SKILL: `regression_test`
+
+### Purpose
+
+Ensure the reported bug has durable automated coverage.
+
+### Real-world developer need
+
+A bug fix without a regression test can silently return later.
+
+### Workflow
+
+```text
+search existing tests
+→ determine whether issue is reproduced
+→ inspect testing conventions
+→ add minimal test if needed
+→ run test before fix when practical
+→ verify it fails for the expected reason
+→ implement fix
+→ verify pass
+```
+
+### Tools
+
+```text
+search
+read_file
+read_symbol
+apply_patch
+run_tests
+inspect_diff
+```
+
+### Important rules
+
+Do not:
+
+- add tests that merely execute code without asserting behavior,
+- weaken existing tests,
+- generate huge redundant test files,
+- claim red-green evidence if the test was never actually run before the fix.
+
+---
+
+## SKILL: `final_review`
+
+### Purpose
+
+Perform an independent final engineering review after verification.
+
+### Inputs should be intentionally limited
+
+```text
+original task
+final diff
+verification evidence
+remaining warnings
+```
+
+### Review questions
+
+```text
+Does the diff fully satisfy the issue?
+Are there unrelated changes?
+Was public behavior unintentionally changed?
+Are tests meaningful?
+Were tests weakened?
+Are there debug statements?
+Was a dependency changed unnecessarily?
+Are obvious edge cases missed?
+Is verification fresh?
+```
+
+### Tools
+
+```text
+inspect_diff
+workspace_status
+verification evidence store
+```
+
+### Output
+
+```text
+approved
+or
+issues requiring another implementation/recovery cycle
+```
+
+### Important
+
+This skill should not automatically approve simply because tests are green.
+
+---
+
+## SKILL: `context_management`
+
+### Purpose
+
+Build the smallest useful model context for the current phase.
+
+### Real-world developer need
+
+Long-running coding agents fail when irrelevant history crowds out relevant source/error evidence.
+
+### Context by phase
+
+#### EXPLORE
+
+```text
+task
+repo map
+repo instructions
+important findings
+```
+
+#### PLAN
+
+```text
+task
+confirmed repository evidence
+candidate files/tests
+current hypotheses
+```
+
+#### IMPLEMENT
+
+```text
+task requirement
+active plan item
+active hypothesis
+target source
+related test
+relevant conventions
+```
+
+#### VERIFY
+
+```text
+current diff summary
+changed files
+known checks
+```
+
+#### RECOVER
+
+```text
+exact latest failure
+relevant source/test
+failed hypothesis/attempt
+```
+
+#### REVIEW
+
+```text
+task
+final diff
+verification evidence
+```
+
+### Rules
+
+- cap context,
+- prefer fresh evidence,
+- drop stale raw logs,
+- keep rejected hypotheses summarized,
+- never include secrets,
+- avoid sending whole repository files unnecessarily.
+
+---
+
+## SKILL: `test_impact_analysis`
+
+### Purpose
+
+Predict the cheapest meaningful tests to run after a change.
+
+### Inputs
+
+```text
+changed files
+changed symbols
+dependency graph
+test relationships
+```
+
+### Workflow
+
+```text
+changed symbol
+→ direct test references
+→ importing modules
+→ nearby test files
+→ package/module suite
+```
+
+### Output
+
+```text
+ranked test targets
+reason for each
+estimated scope
+fallback broader check
+```
+
+### Why valuable
+
+Reduces:
+
+```text
+runtime
+token usage
+repair latency
+```
+
+while preserving strong verification.
+
+---
+
+## SKILL: `baseline_health`
+
+### Purpose
+
+Understand repository health before attributing failures to the agent.
+
+### Workflow
+
+When practical:
+
+```text
+discover checks
+→ run bounded baseline
+→ store existing failures
+```
+
+After edits:
+
+```text
+compare new results against baseline
+```
+
+### Output
+
+```text
+pre-existing failures
+new failures
+resolved failures
+unchanged failures
+```
+
+### Why valuable
+
+Prevents false conclusions such as:
+
+```text
+"my patch broke the repo"
+```
+
+when failures already existed.
+
+---
+
+## SKILL: `finalize_result`
+
+### Purpose
+
+Assemble the truthful final outcome after controller gates pass.
+
+### Inputs
+
+```text
+task
+final diff
+verification evidence
+hypotheses
+recovery history
+efficiency metrics
+termination reason
+```
+
+### Output should distinguish
+
+```text
+VERIFIED
+PARTIALLY_VERIFIED
+UNABLE_TO_VERIFY
+BLOCKED_BY_ENVIRONMENT
+BUDGET_EXHAUSTED
+FAILED
+```
+
+### Important
+
+This skill formats/organizes the result.
+
+It does not override completion policy.
+
+---
+
+# 6.6 Tool and Skill Compatibility Rules
+
+To remain compatible with mature coding-agent architecture patterns, Caramél should follow these principles.
+
+## Stable names
+
+Tool names should be stable machine-facing identifiers:
+
+```text
+read_file
+search
+run_tests
+inspect_diff
+```
+
+Do not rename them based on UI branding.
+
+The TUI may display friendly labels separately.
+
+## JSON-schema-friendly inputs
+
+Every model-callable tool should have:
+
+- explicit required fields,
+- bounded strings/numbers,
+- enums where possible,
+- no ambiguous union shapes unless necessary.
+
+## Versionability
+
+Prepare registry metadata for future evolution:
+
+```ts
+{
+  name: "run_tests",
+  version: 1
+}
+```
+
+No need to expose version to model initially, but keep registry design evolvable.
+
+## Capability discovery
+
+The controller/TUI should derive visible capabilities from the registry:
+
+```ts
+toolRegistry.list()
+skillRegistry.list()
+```
+
+Do not hardcode fake tool names into the TUI.
+
+## Phase permissions
+
+Example:
+
+```text
+EXPLORE
+  read-only repository tools
+
+IMPLEMENT
+  repository read + write + checkpoint
+
+VERIFY
+  execution + verification + diff
+
+REVIEW
+  read-only diff/evidence tools
+```
+
+## Policy remains above registry
+
+A registered tool is not automatically callable.
+
+Controller policy must still check:
+
+```text
+current phase
+risk category
+budget
+workspace constraints
+task context
+```
+
+## Skills are composable
+
+Example:
+
+```text
+repo_understanding
+→ issue_localization
+→ plan_change
+→ implement_change
+→ verification
+→ debug_failure
+→ recovery
+→ final_review
+```
+
+But the controller may skip unnecessary skills on trivial tasks.
+
+## Skills must not become rigid pipelines
+
+Real repositories differ.
+
+Skills provide reusable strategies, not fixed scripts.
+
+---
+
+# 6.7 Real-World Agent Workflow Example
+
+Task:
+
+```text
+Fix expired refresh tokens returning 500 instead of 401.
+```
+
+### Phase 1 — Understand
+
+Skill:
+
+```text
+repo_understanding
+```
+
+Tools:
+
+```text
+list_files
+repository_map
+discover_checks
+search
+```
+
+Findings:
+
+```text
+auth middleware
+token decoder
+auth tests
+```
+
+### Phase 2 — Localize
+
+Skill:
+
+```text
+issue_localization
+```
+
+Tools:
+
+```text
+search
+read_symbol
+find_references
+read_file
+```
+
+Hypothesis:
+
+```text
+middleware decodes refresh token before expiry validation
+```
+
+### Phase 3 — Plan
+
+Skill:
+
+```text
+plan_change
+```
+
+Plan:
+
+```text
+1. inspect existing expired-token tests
+2. add regression coverage if absent
+3. fix validation order
+4. run targeted test
+5. run auth suite
+6. inspect diff
+```
+
+### Phase 4 — Implement
+
+Skill:
+
+```text
+implement_change
+```
+
+Tools:
+
+```text
+create_checkpoint
+read_file
+apply_patch
+inspect_diff
+```
+
+### Phase 5 — Verify
+
+Skill:
+
+```text
+verification
+```
+
+Tools:
+
+```text
+run_tests
+```
+
+Result:
+
+```text
+targeted test failed:
+expected 401
+received 403
+```
+
+### Phase 6 — Diagnose
+
+Skill:
+
+```text
+debug_failure
+```
+
+Tools:
+
+```text
+get_failure_summary
+read_file
+read_symbol
+```
+
+New evidence:
+
+```text
+exception mapping converts expiry error to generic forbidden response
+```
+
+Original hypothesis becomes incomplete.
+
+### Phase 7 — Repair
+
+Skill:
+
+```text
+recovery
+→ implement_change
+```
+
+Tools:
+
+```text
+apply_patch
+inspect_diff
+```
+
+### Phase 8 — Re-verify
+
+Skill:
+
+```text
+verification
+```
+
+Results:
+
+```text
+targeted test PASS
+auth suite PASS
+typecheck PASS
+```
+
+### Phase 9 — Review
+
+Skill:
+
+```text
+final_review
+```
+
+Checks:
+
+```text
+task satisfied
+no unrelated changes
+test meaningful
+verification fresh
+```
+
+### Phase 10 — Finalize
+
+Skill:
+
+```text
+finalize_result
+```
+
+Result:
+
+```text
+VERIFIED
+```
+
+This is the target Caramél operating model.
+
+---
+
+# 6.8 TUI Representation
+
+The TUI should display only capabilities that actually exist in the registries.
+
+Example:
+
+```text
+AVAILABLE TOOLS
+
+› list files
+› search
+› read
+› symbols
+› references
+› edit
+› diff
+› execute
+› tests
+› checkpoints
+```
+
+Example:
+
+```text
+AVAILABLE SKILLS
+
+› repository understanding
+› issue localization
+› planning
+› implementation
+› debugging
+› recovery
+› verification
+› regression testing
+› context management
+› final review
+```
+
+Do not display:
+
+```text
+deploy
+browser
+database
+web search
+```
+
+unless Caramél genuinely implements them.
+
+The registry is the source of truth for UI capability display.
+
+---
+
+# 6.9 Initial Implementation Order for Tools and Skills
+
+Implement in this order.
+
+## Foundation
+
+1. typed tool registry
+2. typed skill registry
+3. shared `ToolResult`
+4. risk/category metadata
+5. phase permission policy
+6. registry-driven TUI capability list
+
+## Core deterministic tools
+
+1. `list_files`
+2. `search`
+3. `read_file`
+4. `read_symbol`
+5. `find_references`
+6. `inspect_diff`
+7. `apply_patch`
+8. `run_command`
+9. `run_tests`
+10. `discover_checks`
+11. `workspace_status`
+12. `create_checkpoint`
+13. `restore_checkpoint`
+14. `get_failure_summary`
+15. policy-gated `finish`
+
+Reuse existing implementations where already present rather than rebuilding them.
+
+## Core skills
+
+1. `repo_understanding`
+2. `issue_localization`
+3. `plan_change`
+4. `implement_change`
+5. `verification`
+6. `debug_failure`
+7. `recovery`
+8. `context_management`
+9. `test_impact_analysis`
+10. `regression_test`
+11. `baseline_health`
+12. `final_review`
+13. `finalize_result`
+
+---
+
+# 6.10 Tool/Skill Definition of Done
+
+A new tool is complete only when:
+
+```text
+✓ input schema exists
+✓ output type exists
+✓ errors are structured
+✓ path/security boundaries enforced
+✓ output is bounded
+✓ phase permissions defined
+✓ risk category defined
+✓ unit tests exist
+✓ event/report integration exists
+✓ no secrets leak
+```
+
+A new skill is complete only when:
+
+```text
+✓ input/output contract exists
+✓ required tools are explicit
+✓ it respects controller state
+✓ it does not bypass policy
+✓ it updates plan/evidence state correctly
+✓ it handles failure paths
+✓ tests cover main behavior
+✓ it remains useful in headless mode
+✓ it does not maintain hidden independent state
+```
+
