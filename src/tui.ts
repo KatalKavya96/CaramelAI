@@ -4,198 +4,373 @@ import type { AgentEvent, AgentPlan, AgentRunResult, PlanQuestion } from "./agen
 const RESET = "\u001b[0m";
 const DIM = "\u001b[2m";
 const BOLD = "\u001b[1m";
-const CYAN = "\u001b[36m";
+const INVERSE = "\u001b[7m";
 const GREEN = "\u001b[32m";
 const YELLOW = "\u001b[33m";
 const MAGENTA = "\u001b[35m";
 const RED = "\u001b[31m";
 
-const CARAMEL = "\u001b[38;5;208m";
-const GOLD = "\u001b[38;5;214m";
+// Caramél palette — close to the reference image.
+const GOLD = "\u001b[38;5;220m";
+const AMBER = "\u001b[38;5;214m";
+const ORANGE = "\u001b[38;5;208m";
 const CREAM = "\u001b[38;5;223m";
-const BROWN = "\u001b[38;5;130m";
+const SOFT = "\u001b[38;5;250m";
 const MUTED = "\u001b[38;5;244m";
-const BG_DARK = "\u001b[48;5;232m";
+const DARK = "\u001b[38;5;236m";
 
+const ANSI_RE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 function paint(enabled: boolean, code: string, value: string): string {
   return enabled ? `${code}${value}${RESET}` : value;
 }
 
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_RE, "");
+}
+
 function visibleLength(value: string): number {
-  return value.replace(/\u001b\[[0-9;]*m/g, "").length;
+  return [...stripAnsi(value)].length;
+}
+
+function padRight(value: string, width: number): string {
+  return value + " ".repeat(Math.max(0, width - visibleLength(value)));
 }
 
 function truncate(value: string, max: number): string {
+  if (max <= 0) return "";
   if (visibleLength(value) <= max) return value;
-  return `${value.slice(0, Math.max(0, max - 1))}…`;
+  const plain = stripAnsi(value);
+  return plain.slice(0, Math.max(0, max - 1)) + "…";
 }
 
-export function box(title: string, lines: readonly string[], options: { color?: boolean; width?: number } = {}): string {
+function centerText(value: string, width: number): string {
+  const left = Math.max(0, Math.floor((width - visibleLength(value)) / 2));
+  return " ".repeat(left) + value;
+}
+
+function fit(value: string, width: number): string {
+  const clipped = truncate(value, width);
+  return padRight(clipped, width);
+}
+
+function hr(width: number, ch = "─"): string {
+  return ch.repeat(Math.max(0, width));
+}
+
+function joinColumns(left: string[], right: string[], leftWidth: number, gap = 2): string[] {
+  const rows = Math.max(left.length, right.length);
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    const l = left[i] ?? "";
+    const r = right[i] ?? "";
+    out.push(`${fit(l, leftWidth)}${" ".repeat(gap)}${r}`);
+  }
+  return out;
+}
+
+function panel(title: string, rows: string[], width: number, color: boolean): string[] {
+  const c = (code: string, v: string) => paint(color, code, v);
+  const inner = width - 2;
+  const topTitle = ` ${title} `;
+  const top = `╭${topTitle}${hr(inner - visibleLength(topTitle))}╮`;
+  const body = rows.map((row) => `│${fit(` ${row}`, inner)}│`);
+  const bottom = `╰${hr(inner)}╯`;
+  return [c(ORANGE, top), ...body, c(ORANGE, bottom)];
+}
+
+export function box(
+  title: string,
+  lines: readonly string[],
+  options: { color?: boolean; width?: number } = {},
+): string {
   const color = options.color ?? true;
   const width = Math.max(48, options.width ?? 86);
   const inner = width - 4;
   const header = ` ${title} `;
-  const top = `╭${header}${"─".repeat(Math.max(0, width - 2 - visibleLength(header)))}╮`;
+  const top = `╭${header}${hr(width - 2 - visibleLength(header))}╮`;
   const body = lines.map((line) => {
     const clipped = truncate(line, inner);
-    return `│ ${clipped}${" ".repeat(Math.max(0, inner - visibleLength(clipped)))} │`;
+    return `│ ${fit(clipped, inner)} │`;
   });
-  const bottom = `╰${"─".repeat(width - 2)}╯`;
-  return [paint(color, CYAN, top), ...body, paint(color, CYAN, bottom)].join("\n");
+  const bottom = `╰${hr(width - 2)}╯`;
+  return [paint(color, ORANGE, top), ...body, paint(color, ORANGE, bottom)].join("\n");
 }
 
-export function renderSplash(options: { color?: boolean } = {}): string {
+const LOGO = [
+  " ██████╗ █████╗ ██████╗  █████╗ ███╗   ███╗███████╗██╗     ",
+  "██╔════╝██╔══██╗██╔══██╗██╔══██╗████╗ ████║██╔════╝██║     ",
+  "██║     ███████║██████╔╝███████║██╔████╔██║█████╗  ██║     ",
+  "██║     ██╔══██║██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ██║     ",
+  "╚██████╗██║  ██║██║  ██║██║  ██║██║ ╚═╝ ██║███████╗███████╗",
+  " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝",
+];
+
+const TOOLS = [
+  ["search", "web, docs, research, real-time info"],
+  ["code", "read, write, edit, refactor"],
+  ["execute", "run commands, notebooks, scripts"],
+  ["browse", "open browser, click, fill, automate"],
+  ["files", "manage files and directories"],
+  ["git", "clone, commit, push, PR"],
+  ["deploy", "build, deploy, monitor"],
+  ["database", "query, analyze, manage"],
+  ["apis", "integrate and test APIs"],
+  ["tools", "extensions and custom tools"],
+  ["memory", "remember context and preferences"],
+] as const;
+
+const SKILLS = [
+  ["planning", "break down tasks, create roadmap"],
+  ["coding", "full-stack, scripts, automation"],
+  ["debugging", "diagnose, fix, improve"],
+  ["research", "deep research, summarise, compare"],
+  ["data", "analyze, clean, visualize"],
+  ["automation", "workflows, pipelines, integrations"],
+  ["documentation", "write docs, README, guides"],
+  ["testing", "tests, lint, eval, improve quality"],
+  ["learning", "adapt to your style and codebase"],
+  ["reasoning", "multi-step problem solving"],
+  ["collaboration", "work with your tools and team"],
+] as const;
+
+const QUICK = ["New Task", "Continue", "Settings", "Tools", "Help"] as const;
+
+export interface SplashOptions {
+  color?: boolean;
+  width?: number;
+  selectedQuickIndex?: number;
+  cwd?: string;
+  version?: string;
+}
+
+function renderHero(width: number, color: boolean): string[] {
+  const c = (code: string, v: string) => paint(color, code, v);
+  const heroRight = [
+    "",
+    `${c(CREAM, "plan")}  ${c(AMBER, ">")}  ${c(CREAM, "think")}  ${c(AMBER, ">")}  ${c(CREAM, "code")}  ${c(AMBER, ">")}  ${c(CREAM, "execute")}  ${c(AMBER, ">")}  ${c(CREAM, "ship")}`,
+    "",
+    c(SOFT, "Your coding, research and automation"),
+    c(SOFT, "companion — with a sweeter taste."),
+  ];
+
+  if (width < 100) {
+    const compact = [
+      ...LOGO.slice(0, 6).map((x) => c(GOLD, x)),
+      c(GOLD, centerText("──  A I   A G E N T   F O R   S W E E T E R   W O R K F L O W S  ──", Math.min(width, 78))),
+      "",
+      ...heroRight,
+    ];
+    return compact;
+  }
+
+  const leftWidth = Math.min(74, Math.floor(width * 0.64));
+  const rightWidth = Math.max(30, width - leftWidth - 4);
+  const logo = LOGO.map((x) => c(GOLD, x));
+  const left = [
+    ...logo,
+    c(GOLD, centerText("──  A I   A G E N T   F O R   S W E E T E R   W O R K F L O W S  ──", leftWidth)),
+  ];
+  const divider = c(ORANGE, "│");
+  const right = heroRight.map((x) => truncate(x, rightWidth - 2));
+  const rows = Math.max(left.length, right.length);
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    const l = left[i] ?? "";
+    const r = right[i] ?? "";
+    out.push(`${fit(l, leftWidth)} ${divider} ${r}`);
+  }
+  return out;
+}
+
+function renderInfoPanels(width: number, color: boolean): string[] {
+  const c = (code: string, v: string) => paint(color, code, v);
+  const toolRows = TOOLS.map(
+    ([name, desc]) => `${c(GOLD, ">  " + name.padEnd(14))}${c(ORANGE, ":")}  ${c(MUTED, desc)}`,
+  );
+  const skillRows = SKILLS.map(
+    ([name, desc]) => `${c(GOLD, ">  " + name.padEnd(16))}${c(ORANGE, ":")}  ${c(MUTED, desc)}`,
+  );
+
+  if (width >= 108) {
+    const gap = 2;
+    const leftWidth = Math.floor((width - gap) / 2);
+    const rightWidth = width - gap - leftWidth;
+    return joinColumns(
+      panel("[ AVAILABLE TOOLS ]", toolRows, leftWidth, color),
+      panel("[ AVAILABLE SKILLS ]", skillRows, rightWidth, color),
+      leftWidth,
+      gap,
+    );
+  }
+
+  return [
+    ...panel("[ AVAILABLE TOOLS ]", toolRows, width, color),
+    "",
+    ...panel("[ AVAILABLE SKILLS ]", skillRows, width, color),
+  ];
+}
+
+function renderQuickStart(width: number, selected: number, color: boolean): string[] {
+  const c = (code: string, v: string) => paint(color, code, v);
+  const title = c(GOLD, "[ QUICK START ]");
+
+  if (width < 84) {
+    const rows = QUICK.map((label, i) => {
+      const active = i === selected;
+      const prefix = active ? c(GOLD, "›") : " ";
+      const number = c(GOLD, String(i + 1));
+      const text = active ? c(BOLD + GOLD, label) : c(CREAM, label);
+      return `${prefix} ${number}  ${text}`;
+    });
+    return panel("[ QUICK START ]", rows, width, color);
+  }
+
+  const inner = width - 2;
+  const topTitle = ` ${title} `;
+  const out = [c(ORANGE, `╭${topTitle}${hr(inner - visibleLength(topTitle))}╮`)];
+
+  const gaps = "  │  ";
+  const available = inner - 2 - visibleLength(gaps) * (QUICK.length - 1);
+  const buttonWidth = Math.max(11, Math.floor(available / QUICK.length));
+  const buttons = QUICK.map((label, i) => {
+    const content = `${i + 1}  ${label}`;
+    const centered = centerText(content, buttonWidth);
+    if (i === selected) {
+      return c(BOLD + GOLD, `▰${fit(centered, buttonWidth - 2)}▰`);
+    }
+    return c(ORANGE, `╭${hr(buttonWidth - 2)}╮`) + "\n" +
+      c(CREAM, `│${fit(centered, buttonWidth - 2)}│`) + "\n" +
+      c(ORANGE, `╰${hr(buttonWidth - 2)}╯`);
+  });
+
+  const split = buttons.map((b) => b.split("\n"));
+  for (let row = 0; row < 3; row++) {
+    const pieces = split.map((part) => part[row] ?? fit("", buttonWidth));
+    out.push(`│ ${pieces.join(c(DARK, gaps))}${" ".repeat(Math.max(0, inner - 1 - visibleLength(pieces.join(gaps))))}│`);
+  }
+  out.push(c(ORANGE, `╰${hr(inner)}╯`));
+  return out;
+}
+
+export function renderSplash(options: SplashOptions = {}): string {
   const color = options.color ?? true;
-
-  const c = (code: string, value: string) => paint(color, code, value);
-
-  const logo = [
-    " ██████╗ █████╗ ██████╗  █████╗ ███╗   ███╗███████╗██╗     ",
-    "██╔════╝██╔══██╗██╔══██╗██╔══██╗████╗ ████║██╔════╝██║     ",
-    "██║     ███████║██████╔╝███████║██╔████╔██║█████╗  ██║     ",
-    "██║     ██╔══██║██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ██║     ",
-    "╚██████╗██║  ██║██║  ██║██║  ██║██║ ╚═╝ ██║███████╗███████╗",
-    " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝",
-  ];
-
-  const popcorn = [
-    "                 ╭──────╮",
-    "            ╭────╯▒▒▒▒▒▒╰──╮",
-    "         ╭──╯▒▒▒▒▒▒▒▒▒▒▒▒▒╰──╮",
-    "       ╭─╯▒▒▒▒  ░░▒▒░░  ▒▒▒▒▒╰─╮",
-    "      │▒▒░░  ●  ░▒▒▒░  ●  ░░▒▒│",
-    "      │▒▒▒▒░░░▒▒▒▒▒▒▒▒░░░▒▒▒▒│",
-    "       ╰─────────╥──────────────╯",
-    "                 ║",
-    "                 ║  caramel",
-    "                 ║  drizzle",
-    "              ╭──╨──╮",
-    "          ✦  (  ● ●  )  ✦",
-    "        ✦  ( ● ● ● ● ● )",
-    "       (● ● ● ● ● ● ● ●)",
-    "      ╭──────────────────╮",
-    "      │ ░█░█░█░█░█░█░█░ │",
-    "      │ █░█░█░█░█░█░█░█ │",
-    "      │ ░█░█░  ◉  ░█░█░ │",
-    "      │ █░█░█░█░█░█░█░█ │",
-    "      ╰──────────────────╯",
-  ];
-
-  const tools = [
-    ["repo_scope",      "clone, inspect, read, patch",       "work with repositories"],
-    ["caramel_search",  "search files, symbols, context",   "find what matters"],
-    ["kernel_exec",     "run commands and tooling",         "execute with confidence"],
-    ["code_studio",     "edit, patch, refactor",            "build and improve code"],
-    ["test_crunch",     "run tests, lint, verify",          "evidence over claims"],
-    ["memory_jar",      "remember findings and failures",   "keep context useful"],
-    ["checkpoint",      "save, restore, recover",           "safe experimentation"],
-    ["diff_inspect",    "review final changes",             "verify before finish"],
-  ] as const;
-
-  const skills = [
-    ["plan_and_breakdown",   "turn issues into actionable plans"],
-    ["repo_understanding",   "locate relevant code quickly"],
-    ["debug_and_fix",        "diagnose failures and repair"],
-    ["context_management",   "keep only useful information"],
-    ["failure_recovery",     "adapt instead of repeating"],
-    ["verification",         "prove the change actually works"],
-  ] as const;
-
-  const WIDTH = 118;
-  const line = "─".repeat(WIDTH - 2);
-
-  const row = (left: string, right = "") => {
-    const gap = Math.max(1, WIDTH - 4 - visibleLength(left) - visibleLength(right));
-    return `│ ${left}${" ".repeat(gap)}${right} │`;
-  };
+  const c = (code: string, v: string) => paint(color, code, v);
+  const terminalWidth = options.width ?? process.stdout.columns ?? 120;
+  const width = Math.max(68, Math.min(170, terminalWidth - 2));
+  const inner = width - 2;
+  const selected = Math.min(Math.max(options.selectedQuickIndex ?? 0, 0), QUICK.length - 1);
+  const version = options.version ?? "v0.1.0";
+  const cwd = options.cwd ?? process.cwd().replace(process.env.HOME ?? "", "~");
 
   const out: string[] = [];
+  const top = `╭${hr(inner)}╮`;
+  out.push(c(ORANGE, top));
 
-  out.push(c(CARAMEL, `╭${line}╮`));
-  out.push(row(
-    c(GOLD, "●  ●  ●   ›_  ~/caramel"),
-    c(GOLD, "Caramél Agent v0.1.0")
-  ));
-  out.push(c(CARAMEL, `├${line}┤`));
+  const topLeft = `${c(GOLD, "●")} ${c(ORANGE, "●")} ${c(RED, "●")}    ${c(GOLD, "~/caramel")}`;
+  const topRight = c(GOLD, `Caramél Agent   ${version}`);
+  const topGap = Math.max(1, inner - 2 - visibleLength(topLeft) - visibleLength(topRight));
+  out.push(`│ ${topLeft}${" ".repeat(topGap)}${topRight} │`);
+  out.push(c(ORANGE, `├${hr(inner)}┤`));
 
-  const logoWidth = Math.max(...logo.map(visibleLength));
-
-  for (let i = 0; i < logo.length; i++) {
-    const left = popcorn[i] ?? "";
-    const center = logo[i] ?? "";
-    const tagline = [
-      "PLAN.",
-      "BUILD.",
-      "VERIFY.",
-      "ENJOY.",
-      "",
-      "AI Coding Harness",
-    ][i] ?? "";
-
-    const leftCol = left.padEnd(31);
-    const centerCol = c(GOLD, center.padEnd(logoWidth));
-    const rightCol = c(CARAMEL, tagline);
-
-    out.push(row(`${c(CARAMEL, leftCol)}   ${centerCol}`, rightCol));
+  for (const line of renderHero(inner - 2, color)) {
+    out.push(`│ ${fit(line, inner - 2)} │`);
   }
 
-  for (let i = logo.length; i < popcorn.length; i++) {
-    out.push(row(c(CARAMEL, popcorn[i] ?? "")));
+  out.push(`│ ${fit("", inner - 2)} │`);
+
+  for (const line of renderInfoPanels(inner - 2, color)) {
+    out.push(`│ ${fit(line, inner - 2)} │`);
   }
 
-  out.push(row(""));
-  out.push(row(
-    c(CREAM, "                     ✦  AI AGENT FOR SWEETER SOFTWARE WORKFLOWS  ✦")
-  ));
-  out.push(row(""));
+  out.push(`│ ${fit("", inner - 2)} │`);
 
-  out.push(row(
-    c(GOLD, "  🔧 Available Tools  ") +
-    c(BROWN, "──────────────────────────────────────────────────────────────────────────────")
-  ));
-
-  for (const [name, capability, note] of tools) {
-    const left =
-      `  ${c(GOLD, name.padEnd(18))} : ` +
-      `${c(CREAM, capability.padEnd(34))} ` +
-      `${c(MUTED, "// " + note)}`;
-
-    out.push(row(left));
+  for (const line of renderQuickStart(inner - 2, selected, color)) {
+    out.push(`│ ${fit(line, inner - 2)} │`);
   }
 
-  out.push(row(""));
-
-  out.push(row(
-    c(GOLD, "  ✦ Available Skills ") +
-    c(BROWN, "──────────────────────────────────────────────────────────────────────────────")
-  ));
-
-  for (const [name, capability] of skills) {
-    const left =
-      `  ${c(GOLD, name.padEnd(22))} : ` +
-      `${c(CREAM, capability.padEnd(43))}`;
-
-    out.push(row(left));
-  }
-
-  out.push(row(""));
-  out.push(c(CARAMEL, `├${line}┤`));
-
-  const cwd = process.cwd().replace(process.env.HOME ?? "", "~");
-
-  out.push(row(
-    `${c(GOLD, "caramel@agent")}   │   📁 ${c(CREAM, cwd)}`,
-    `${c(GOLD, "⚡ SWEETER CODE. VERIFIED OUTCOMES.")}`
-  ));
-
-  out.push(c(CARAMEL, `╰${line}╯`));
-
-  out.push("");
-  out.push(c(MUTED, "Caramel AI Coding Harness"));
-  out.push(c(MUTED, "Press Enter to configure a coding run."));
+  out.push(c(ORANGE, `├${hr(inner)}┤`));
+  const statusLeft = `${c(GOLD, "caramel@agent")}  ${c(ORANGE, "│")}  ${c(CREAM, cwd)}  ${c(ORANGE, "│")}  ${c(GOLD, ">")} ${c(CREAM, "▌")}`;
+  const statusRight = `${c(GOLD, "sweeter ideas, faster execution")} ${c(ORANGE, "✦")}`;
+  const statusGap = Math.max(1, inner - 2 - visibleLength(statusLeft) - visibleLength(statusRight));
+  out.push(`│ ${truncate(statusLeft, Math.max(1, inner - 3))}${" ".repeat(statusGap)}${truncate(statusRight, Math.max(0, inner - visibleLength(statusLeft) - statusGap - 2))} │`);
+  out.push(c(ORANGE, `╰${hr(inner)}╯`));
 
   return out.join("\n");
+}
+
+export type HomeAction = "new" | "continue" | "settings" | "tools" | "help";
+
+export function createCaramelHomeSelector(options: {
+  color?: boolean;
+  input?: NodeJS.ReadStream;
+  output?: NodeJS.WriteStream;
+  cwd?: string;
+  version?: string;
+} = {}): () => HomeAction | null {
+  const input = options.input ?? process.stdin;
+  const output = options.output ?? process.stdout;
+  const color = options.color ?? true;
+  const values: HomeAction[] = ["new", "continue", "settings", "tools", "help"];
+
+  return () => {
+    if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
+      return "new";
+    }
+
+    let selected = 0;
+    const previousRawMode = input.isRaw;
+    const buffer = Buffer.alloc(16);
+
+    const render = () => {
+      output.write("\u001b[2J\u001b[3J\u001b[H");
+      output.write(renderSplash({
+        color,
+        width: output.columns,
+        selectedQuickIndex: selected,
+        cwd: options.cwd,
+        version: options.version,
+      }));
+      output.write("\n");
+    };
+
+    output.write("\u001b[?1049h\u001b[?25l");
+    input.setRawMode(true);
+    input.resume();
+    render();
+
+    try {
+      while (true) {
+        const fd = (input as { fd?: number }).fd ?? 0;
+        const read = readSync(fd, buffer, 0, buffer.length, null);
+        if (read <= 0) continue;
+        const chunk = buffer.subarray(0, read).toString("utf8");
+
+        if (chunk === "\u0003") return null;
+        if (chunk === "\r" || chunk === "\n") return values[selected] ?? null;
+        if (chunk === "\u001b") return null;
+
+        if (chunk === "\u001b[D" || chunk === "h" || chunk === "\u001b[A" || chunk === "k") {
+          selected = selected === 0 ? QUICK.length - 1 : selected - 1;
+          render();
+          continue;
+        }
+        if (chunk === "\u001b[C" || chunk === "l" || chunk === "\u001b[B" || chunk === "j") {
+          selected = selected === QUICK.length - 1 ? 0 : selected + 1;
+          render();
+          continue;
+        }
+        if (/^[1-5]$/.test(chunk)) {
+          selected = Number(chunk) - 1;
+          render();
+          continue;
+        }
+      }
+    } finally {
+      input.setRawMode(previousRawMode);
+      output.write("\u001b[?25h\u001b[?1049l");
+    }
+  };
 }
 
 function valueOf(payload: unknown, key: string): unknown {
@@ -209,8 +384,7 @@ function actionType(payload: unknown): string {
     const type = (action as Record<string, unknown>).type;
     if (typeof type === "string") return type;
   }
-  const flat = valueOf(payload, "action");
-  return typeof flat === "string" ? flat : "unknown";
+  return typeof action === "string" ? action : "unknown";
 }
 
 function changedFiles(payload: unknown): string[] {
@@ -219,7 +393,9 @@ function changedFiles(payload: unknown): string[] {
   const value = (result as Record<string, unknown>).value;
   if (typeof value !== "object" || value === null) return [];
   const files = (value as Record<string, unknown>).changedFiles;
-  return Array.isArray(files) ? files.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(files)
+    ? files.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export function createTuiEventRenderer(
@@ -242,7 +418,7 @@ export function createTuiEventRenderer(
       const type = actionType(event.payload);
       write(box(`Step ${event.sequence} · model`, [
         `${paint(color, MAGENTA, "thinking")}: ${String(intent ?? "choosing next action")}`,
-        `${paint(color, CYAN, "action")}: ${type}`,
+        `${paint(color, GOLD, "action")}: ${type}`,
       ], { color }));
       return;
     }
@@ -262,7 +438,8 @@ export function createTuiEventRenderer(
       const workspaceChanged = valueOf(event.payload, "workspaceChanged") === true;
       const files = changedFiles(event.payload);
       const result = valueOf(event.payload, "result");
-      const ok = typeof result === "object" && result !== null && (result as Record<string, unknown>).ok !== false;
+      const ok = typeof result === "object" && result !== null &&
+        (result as Record<string, unknown>).ok !== false;
       write(box(`Step ${event.sequence} · result`, [
         `${workspaceChanged ? paint(color, GREEN, "changed") : paint(color, YELLOW, "unchanged")}: ${String(action ?? "unknown")}`,
         `status: ${ok ? "ok" : "blocked/rejected"}`,
@@ -283,7 +460,10 @@ export function createTuiEventRenderer(
   };
 }
 
-export function renderRunSummary(result: AgentRunResult, options: { color?: boolean } = {}): string {
+export function renderRunSummary(
+  result: AgentRunResult,
+  options: { color?: boolean } = {},
+): string {
   const color = options.color ?? true;
   return box("Final evidence", [
     `status: ${result.status}`,
@@ -295,7 +475,6 @@ export function renderRunSummary(result: AgentRunResult, options: { color?: bool
     `report: ${result.reportPath}`,
   ], { color });
 }
-
 
 export interface SelectChoice {
   label: string;
@@ -313,7 +492,7 @@ export function renderSelectMenu(
   title: string,
   choices: readonly SelectChoice[],
   selectedIndex: number,
-  options: { color?: boolean; help?: string } = {},
+  options: { color?: boolean; help?: string; width?: number } = {},
 ): string {
   const color = options.color ?? true;
   const lines = [
@@ -321,13 +500,13 @@ export function renderSelectMenu(
     "",
     ...choices.map((choice, index) => {
       const selected = index === selectedIndex;
-      const marker = selected ? "›" : " ";
-      const label = selected ? paint(color, BOLD, choice.label) : choice.label;
-      const hint = choice.hint ? paint(color, DIM, `  ${choice.hint}`) : "";
+      const marker = selected ? paint(color, GOLD, "›") : " ";
+      const label = selected ? paint(color, BOLD + GOLD, choice.label) : choice.label;
+      const hint = choice.hint ? paint(color, DIM + MUTED, `  ${choice.hint}`) : "";
       return `${marker} ${label}${hint}`;
     }),
   ];
-  return box(title, lines, { color, width: 92 });
+  return box(title, lines, { color, width: options.width ?? Math.min(92, process.stdout.columns ?? 92) });
 }
 
 export function createArrowKeySelector(options: {
@@ -350,6 +529,7 @@ export function createArrowKeySelector(options: {
       output.write("\u001b[2J\u001b[3J\u001b[H");
       output.write(renderSelectMenu(title, choices, selected, {
         color,
+        width: output.columns,
         ...(selectOptions.help === undefined ? {} : { help: selectOptions.help }),
       }));
       output.write("\n");
@@ -368,12 +548,12 @@ export function createArrowKeySelector(options: {
         const read = readSync(fd, buffer, 0, buffer.length, null);
         const chunk = buffer.subarray(0, read).toString("utf8");
 
-        if (chunk === "\u0003") throw new Error("Interactive selection cancelled.");
+        if (chunk === "\u0003" || chunk === "\u001b") return null;
         if (chunk === "\r" || chunk === "\n") return choices[selected]?.value ?? null;
-        if (chunk === "\u001b[A" || chunk === "k") {
+        if (chunk === "\u001b[A" || chunk === "k" || chunk === "\u001b[D" || chunk === "h") {
           selected = selected === 0 ? choices.length - 1 : selected - 1;
           render();
-        } else if (chunk === "\u001b[B" || chunk === "j") {
+        } else if (chunk === "\u001b[B" || chunk === "j" || chunk === "\u001b[C" || chunk === "l") {
           selected = selected === choices.length - 1 ? 0 : selected + 1;
           render();
         } else if (/^[1-9]$/.test(chunk)) {
