@@ -10,6 +10,14 @@ const YELLOW = "\u001b[33m";
 const MAGENTA = "\u001b[35m";
 const RED = "\u001b[31m";
 
+const CARAMEL = "\u001b[38;5;208m";
+const GOLD = "\u001b[38;5;214m";
+const CREAM = "\u001b[38;5;223m";
+const BROWN = "\u001b[38;5;130m";
+const MUTED = "\u001b[38;5;244m";
+const BG_DARK = "\u001b[48;5;232m";
+
+
 function paint(enabled: boolean, code: string, value: string): string {
   return enabled ? `${code}${value}${RESET}` : value;
 }
@@ -39,14 +47,155 @@ export function box(title: string, lines: readonly string[], options: { color?: 
 
 export function renderSplash(options: { color?: boolean } = {}): string {
   const color = options.color ?? true;
-  return box("Caramel", [
-    paint(color, BOLD, "Caramel AI Coding Harness"),
-    "OpenCode-style terminal workflow for issue-to-patch runs.",
-    "",
-    "Setup → Repo + API key + model → GitHub issue → live agent timeline → patch decision",
-    "",
-    paint(color, DIM, "Press Enter on the prompt below to continue."),
-  ], { color, width: 88 });
+
+  const c = (code: string, value: string) => paint(color, code, value);
+
+  const logo = [
+    " ██████╗ █████╗ ██████╗  █████╗ ███╗   ███╗███████╗██╗     ",
+    "██╔════╝██╔══██╗██╔══██╗██╔══██╗████╗ ████║██╔════╝██║     ",
+    "██║     ███████║██████╔╝███████║██╔████╔██║█████╗  ██║     ",
+    "██║     ██╔══██║██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ██║     ",
+    "╚██████╗██║  ██║██║  ██║██║  ██║██║ ╚═╝ ██║███████╗███████╗",
+    " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝",
+  ];
+
+  const popcorn = [
+    "                 ╭──────╮",
+    "            ╭────╯▒▒▒▒▒▒╰──╮",
+    "         ╭──╯▒▒▒▒▒▒▒▒▒▒▒▒▒╰──╮",
+    "       ╭─╯▒▒▒▒  ░░▒▒░░  ▒▒▒▒▒╰─╮",
+    "      │▒▒░░  ●  ░▒▒▒░  ●  ░░▒▒│",
+    "      │▒▒▒▒░░░▒▒▒▒▒▒▒▒░░░▒▒▒▒│",
+    "       ╰─────────╥──────────────╯",
+    "                 ║",
+    "                 ║  caramel",
+    "                 ║  drizzle",
+    "              ╭──╨──╮",
+    "          ✦  (  ● ●  )  ✦",
+    "        ✦  ( ● ● ● ● ● )",
+    "       (● ● ● ● ● ● ● ●)",
+    "      ╭──────────────────╮",
+    "      │ ░█░█░█░█░█░█░█░ │",
+    "      │ █░█░█░█░█░█░█░█ │",
+    "      │ ░█░█░  ◉  ░█░█░ │",
+    "      │ █░█░█░█░█░█░█░█ │",
+    "      ╰──────────────────╯",
+  ];
+
+  const tools = [
+    ["repo_scope",      "clone, inspect, read, patch",       "work with repositories"],
+    ["caramel_search",  "search files, symbols, context",   "find what matters"],
+    ["kernel_exec",     "run commands and tooling",         "execute with confidence"],
+    ["code_studio",     "edit, patch, refactor",            "build and improve code"],
+    ["test_crunch",     "run tests, lint, verify",          "evidence over claims"],
+    ["memory_jar",      "remember findings and failures",   "keep context useful"],
+    ["checkpoint",      "save, restore, recover",           "safe experimentation"],
+    ["diff_inspect",    "review final changes",             "verify before finish"],
+  ] as const;
+
+  const skills = [
+    ["plan_and_breakdown",   "turn issues into actionable plans"],
+    ["repo_understanding",   "locate relevant code quickly"],
+    ["debug_and_fix",        "diagnose failures and repair"],
+    ["context_management",   "keep only useful information"],
+    ["failure_recovery",     "adapt instead of repeating"],
+    ["verification",         "prove the change actually works"],
+  ] as const;
+
+  const WIDTH = 118;
+  const line = "─".repeat(WIDTH - 2);
+
+  const row = (left: string, right = "") => {
+    const gap = Math.max(1, WIDTH - 4 - visibleLength(left) - visibleLength(right));
+    return `│ ${left}${" ".repeat(gap)}${right} │`;
+  };
+
+  const out: string[] = [];
+
+  out.push(c(CARAMEL, `╭${line}╮`));
+  out.push(row(
+    c(GOLD, "●  ●  ●   ›_  ~/caramel"),
+    c(GOLD, "Caramél Agent v0.1.0")
+  ));
+  out.push(c(CARAMEL, `├${line}┤`));
+
+  const logoWidth = Math.max(...logo.map(visibleLength));
+
+  for (let i = 0; i < logo.length; i++) {
+    const left = popcorn[i] ?? "";
+    const center = logo[i] ?? "";
+    const tagline = [
+      "PLAN.",
+      "BUILD.",
+      "VERIFY.",
+      "ENJOY.",
+      "",
+      "AI Coding Harness",
+    ][i] ?? "";
+
+    const leftCol = left.padEnd(31);
+    const centerCol = c(GOLD, center.padEnd(logoWidth));
+    const rightCol = c(CARAMEL, tagline);
+
+    out.push(row(`${c(CARAMEL, leftCol)}   ${centerCol}`, rightCol));
+  }
+
+  for (let i = logo.length; i < popcorn.length; i++) {
+    out.push(row(c(CARAMEL, popcorn[i] ?? "")));
+  }
+
+  out.push(row(""));
+  out.push(row(
+    c(CREAM, "                     ✦  AI AGENT FOR SWEETER SOFTWARE WORKFLOWS  ✦")
+  ));
+  out.push(row(""));
+
+  out.push(row(
+    c(GOLD, "  🔧 Available Tools  ") +
+    c(BROWN, "──────────────────────────────────────────────────────────────────────────────")
+  ));
+
+  for (const [name, capability, note] of tools) {
+    const left =
+      `  ${c(GOLD, name.padEnd(18))} : ` +
+      `${c(CREAM, capability.padEnd(34))} ` +
+      `${c(MUTED, "// " + note)}`;
+
+    out.push(row(left));
+  }
+
+  out.push(row(""));
+
+  out.push(row(
+    c(GOLD, "  ✦ Available Skills ") +
+    c(BROWN, "──────────────────────────────────────────────────────────────────────────────")
+  ));
+
+  for (const [name, capability] of skills) {
+    const left =
+      `  ${c(GOLD, name.padEnd(22))} : ` +
+      `${c(CREAM, capability.padEnd(43))}`;
+
+    out.push(row(left));
+  }
+
+  out.push(row(""));
+  out.push(c(CARAMEL, `├${line}┤`));
+
+  const cwd = process.cwd().replace(process.env.HOME ?? "", "~");
+
+  out.push(row(
+    `${c(GOLD, "caramel@agent")}   │   📁 ${c(CREAM, cwd)}`,
+    `${c(GOLD, "⚡ SWEETER CODE. VERIFIED OUTCOMES.")}`
+  ));
+
+  out.push(c(CARAMEL, `╰${line}╯`));
+
+  out.push("");
+  out.push(c(MUTED, "Caramel AI Coding Harness"));
+  out.push(c(MUTED, "Press Enter to configure a coding run."));
+
+  return out.join("\n");
 }
 
 function valueOf(payload: unknown, key: string): unknown {
