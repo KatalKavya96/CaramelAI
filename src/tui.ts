@@ -8,6 +8,7 @@ const INVERSE = "\u001b[7m";
 const GREEN = "\u001b[32m";
 const YELLOW = "\u001b[33m";
 const MAGENTA = "\u001b[35m";
+const CYAN = "\u001b[36m";
 const RED = "\u001b[31m";
 
 // Caramél palette — close to the reference image.
@@ -137,11 +138,11 @@ const SKILLS = [
 const QUICK = ["New Task", "Continue", "Settings", "Tools", "Help"] as const;
 
 export interface SplashOptions {
-  color?: boolean;
-  width?: number;
-  selectedQuickIndex?: number;
-  cwd?: string;
-  version?: string;
+  color?: boolean | undefined;
+  width?: number | undefined;
+  selectedQuickIndex?: number | undefined;
+  cwd?: string | undefined;
+  version?: string | undefined;
 }
 
 function renderHero(width: number, color: boolean): string[] {
@@ -295,6 +296,8 @@ export function renderSplash(options: SplashOptions = {}): string {
   const statusGap = Math.max(1, inner - 2 - visibleLength(statusLeft) - visibleLength(statusRight));
   out.push(`│ ${truncate(statusLeft, Math.max(1, inner - 3))}${" ".repeat(statusGap)}${truncate(statusRight, Math.max(0, inner - visibleLength(statusLeft) - statusGap - 2))} │`);
   out.push(c(ORANGE, `╰${hr(inner)}╯`));
+  out.push("");
+  out.push(c(MUTED, "Caramel AI Coding Harness"));
 
   return out.join("\n");
 }
@@ -479,13 +482,13 @@ export function renderRunSummary(
 export interface SelectChoice {
   label: string;
   value: string;
-  hint?: string;
+  hint?: string | undefined;
 }
 
 export type TerminalSelector = (
   title: string,
   choices: readonly SelectChoice[],
-  options?: { defaultIndex?: number; help?: string },
+  options?: { defaultIndex?: number | undefined; help?: string | undefined },
 ) => string | null;
 
 export function renderSelectMenu(
