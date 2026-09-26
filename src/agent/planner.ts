@@ -1,31 +1,25 @@
+import { z } from "zod";
 import type { ModelAdapter, ModelRequest } from "../model";
 import type { AgentPlan, PlanQuestion } from "./types";
 
-export const PLAN_SYSTEM_PROMPT = `You are a senior software architect preparing a coding plan. Analyze the task and repository context, then produce clarifying questions for the developer.
+import { PLAN_SYSTEM_PROMPT } from "../prompts";
+export { PLAN_SYSTEM_PROMPT } from "../prompts";
 
-Output contract:
-- Return only one valid JSON object with this exact shape:
-{
-  "summary": "One-paragraph high-level approach",
-  "questions": [
-    {
-      "question": "Clear, specific question",
-      "options": ["Recommended option first", "Alternative 1", "Alternative 2"],
-      "defaultIndex": 0,
-      "allowCustom": true
-    }
-  ]
-}
+export const PlanQuestionSchema = z.object({
+  question: z.string().min(1, "Question must not be empty."),
+  options: z.array(z.string().min(1)).min(1, "At least one option is required."),
+  defaultIndex: z.number().int().nonnegative().optional(),
+  allowCustom: z.boolean().default(true),
+});
 
-Question guidelines:
-- Ask 3–6 focused questions about architecture, implementation approach, and quality expectations.
-- The first option should always be the recommended choice based on repo conventions.
-- Cover: file/directory placement, patterns to follow, testing strategy, error handling approach, naming conventions.
-- If the repo already has strong conventions, ask fewer questions and use those conventions as defaults.
-- Do not ask about things that are obvious from the issue or repo structure.
-- Do not wrap JSON in Markdown. Do not include prose. Return only the JSON object.`;
+export const PlanResponseSchema = z.object({
+  summary: z.string().min(1, "Plan summary must not be empty."),
+  questions: z.array(PlanQuestionSchema).default([]),
+});
 
-function parsePlanResponse(output: string): { summary: string; questions: PlanQuestion[] } {
+export type PlanResponse = z.infer<typeof PlanResponseSchema>;
+
+export function parsePlanResponse(output: string): PlanResponse {
   let parsed: unknown;
   const trimmed = output.trim();
 
@@ -62,28 +56,51 @@ function parsePlanResponse(output: string): { summary: string; questions: PlanQu
     }
   }
 
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { summary: "Direct execution — no clarifying questions needed.", questions: [] };
+  // 1. First attempt strict Zod validation
+  const validated = PlanResponseSchema.safeParse(parsed);
+  if (validated.success) {
+    return {
+      summary: validated.data.summary,
+      questions: validated.data.questions.slice(0, 6),
+    };
   }
 
-  const record = parsed as Record<string, unknown>;
-  const summary = typeof record.summary === "string" ? record.summary : "Executing task based on issue analysis.";
-  const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
+  // 2. Gracefully recover partial or loosely-typed fields using Zod element-level validation
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    const summary = typeof record.summary === "string" && record.summary.trim() !== ""
+      ? record.summary
+      : "Executing task based on issue analysis.";
+    const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
+    const questions: PlanQuestion[] = [];
 
-  const questions: PlanQuestion[] = rawQuestions
-    .filter((q): q is Record<string, unknown> => typeof q === "object" && q !== null)
-    .map((q) => ({
-      question: typeof q.question === "string" ? q.question : "How should this be implemented?",
-      options: Array.isArray(q.options)
-        ? q.options.filter((o): o is string => typeof o === "string")
-        : ["Follow existing repo conventions"],
-      defaultIndex: typeof q.defaultIndex === "number" ? q.defaultIndex : 0,
-      allowCustom: q.allowCustom !== false,
-    }))
-    .filter((q) => q.options.length > 0)
-    .slice(0, 6);
+    for (const q of rawQuestions) {
+      const parsedQ = PlanQuestionSchema.safeParse(q);
+      if (parsedQ.success) {
+        questions.push(parsedQ.data);
+      } else if (typeof q === "object" && q !== null) {
+        const item = q as Record<string, unknown>;
+        const questionText = typeof item.question === "string" && item.question.trim() !== ""
+          ? item.question
+          : "How should this be implemented?";
+        const optionsList = Array.isArray(item.options)
+          ? item.options.filter((opt): opt is string => typeof opt === "string" && opt.trim() !== "")
+          : ["Follow existing repo conventions"];
+        if (optionsList.length > 0) {
+          questions.push({
+            question: questionText,
+            options: optionsList,
+            defaultIndex: typeof item.defaultIndex === "number" ? item.defaultIndex : 0,
+            allowCustom: item.allowCustom !== false,
+          });
+        }
+      }
+    }
 
-  return { summary, questions };
+    return { summary, questions: questions.slice(0, 6) };
+  }
+
+  return { summary: "Direct execution — no clarifying questions needed.", questions: [] };
 }
 
 export function formatPlanContext(plan: AgentPlan): string {

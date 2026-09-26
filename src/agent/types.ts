@@ -7,7 +7,7 @@ import type { TaskMemorySnapshot } from "../memory";
 export interface PlanQuestion {
   question: string;
   options: string[];
-  defaultIndex?: number;
+  defaultIndex?: number | undefined;
   allowCustom: boolean;
 }
 
