@@ -52,7 +52,8 @@ describe("loadRunConfig", () => {
     });
 
     expect(config.task).toContain("Source issue: https://github.com/o/r/issues/1");
-    expect(config.task).toContain("Title: Fix compact filters");
+    expect(config.task).toContain("Issue title: Fix compact filters");
+    expect(config.task).toContain("Issue description and acceptance criteria:");
     expect(config.task).toContain("Expected behavior.");
   });
 

@@ -81,7 +81,9 @@ The shorter Caramel issue command uses the optimized DeepSeek defaults:
 make caramel REPO=/path/to/repo ISSUE=https://github.com/owner/repo/issues/123
 ```
 
-For harder issues, override the budgets or reasoning:
+The default run uses a short focused planning phase, begins implementation after two to four repository inspections, and keeps the fetched GitHub issue title and description as the binding acceptance contract through verification.
+
+The balanced default ceiling is 120 steps, 80 model calls, and 60 minutes, with separate room for repair, verification, stagnation recovery, and compact context. Override it only when a task needs a different profile:
 
 ```bash
 make caramel REPO=/path/to/repo ISSUE=https://github.com/owner/repo/issues/123 REASONING=high MAX_STEPS=40 MAX_MODEL_CALLS=25 MAX_MINUTES=30
@@ -94,9 +96,13 @@ AI_API_KEY="$AI_API_KEY" bun run src/cli.ts run \
   --repo . \
   --issue https://github.com/owner/repo/issues/123 \
   --output /tmp/dinner-manual \
-  --max-steps 32 \
-  --max-minutes 20 \
-  --max-model-calls 18
+  --max-steps 120 \
+  --max-minutes 60 \
+  --max-model-calls 80 \
+  --max-repair-attempts 12 \
+  --verification-reserve-steps 10 \
+  --max-stagnation-interventions 6 \
+  --max-context-chars 64000
 ```
 
 Additional controls include `--max-repair-attempts`, `--verification-reserve-steps`, `--max-stagnation-interventions`, `--max-context-chars`, `--repository-map enabled`, `--reasoning-effort medium`, and `--color disabled`. Run `make run ARGS="--help"` for the authoritative list.

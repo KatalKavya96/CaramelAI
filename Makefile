@@ -2,9 +2,13 @@ PROVIDER ?= deepseek
 MODEL ?= deepseek-flash
 REASONING ?= medium
 REPOSITORY_MAP ?= enabled
-MAX_STEPS ?= 32
-MAX_MODEL_CALLS ?= 18
-MAX_MINUTES ?= 20
+MAX_STEPS ?= 120
+MAX_MODEL_CALLS ?= 80
+MAX_MINUTES ?= 60
+MAX_REPAIR_ATTEMPTS ?= 12
+VERIFICATION_RESERVE_STEPS ?= 10
+MAX_STAGNATION_INTERVENTIONS ?= 6
+MAX_CONTEXT_CHARS ?= 64000
 
 .PHONY: setup runner-image run caramel benchmark scorecard test test-docker contract rehearse-clean check
 
@@ -29,7 +33,11 @@ caramel:
 		--repository-map "$(REPOSITORY_MAP)" \
 		--max-steps "$(MAX_STEPS)" \
 		--max-model-calls "$(MAX_MODEL_CALLS)" \
-		--max-minutes "$(MAX_MINUTES)"
+		--max-minutes "$(MAX_MINUTES)" \
+		--max-repair-attempts "$(MAX_REPAIR_ATTEMPTS)" \
+		--verification-reserve-steps "$(VERIFICATION_RESERVE_STEPS)" \
+		--max-stagnation-interventions "$(MAX_STAGNATION_INTERVENTIONS)" \
+		--max-context-chars "$(MAX_CONTEXT_CHARS)"
 
 benchmark:
 	bun run src/benchmark/cli.ts evaluate $(ARGS)

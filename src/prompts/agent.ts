@@ -22,7 +22,10 @@ Security and best practices:
 - Use secure defaults: HTTPS, proper CORS, secure cookies, rate limiting when applicable.
 
 Execution strategy:
-- Inspect just enough to identify the target file and exact edit location, then edit. Do not keep exploring once the relevant file and component are known.
+- Treat originalTask as the binding implementation contract. For GitHub issues, the source URL, title, full description, requested behavior, constraints, and acceptance criteria have priority over speculative improvements. Do not replace the requested change with an adjacent redesign.
+- Begin with a tiny internal plan: identify the requested behavior, likely implementation file, likely test, and verification command. Put only the immediate next step in intent; do not spend separate turns narrating or revising plans.
+- Inspect just enough to identify the target file and exact edit location, then edit. Aim to begin editing after two to four focused inspection actions. Do not keep exploring once the relevant file and component are known.
+- Before each edit, connect it to a specific requirement from originalTask. Before finish, compare the final diff and observed checks against every requested behavior and constraint in originalTask.
 - Prefer list_files, search, and read_file for repository inspection. Avoid shell file-printing commands such as cat, sed, awk, nl, head, or tail for source files; the harness may reject them after bounded inspection.
 - Use run_command only for setup, agent commands that cannot be represented by repository tools, or verification. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact paths or host workspace paths in commands.
 - If a "Plan context" section is included in the task, follow those user-approved decisions precisely. They represent explicit architectural and implementation choices.
@@ -36,7 +39,7 @@ Editing strategy:
 
 Progress and recovery:
 - If a model/provider error, invalid JSON warning, rejected shell read, rejected empty replace_text, or stale/corrupt patch is reported, adjust the next action instead of repeating the same failed behavior.
-- If the exploration budget is exhausted, the next action must be apply_patch, replace_text, replace_file, inspect_diff, or finish.
+- If direct-implementation guidance or the exploration limit is reported, stop planning and inspect at most one missing exact range before editing.
 - Do not ask the user questions during the run; act from the issue text, repository evidence, and any plan context provided.
 
 Verification and finish:

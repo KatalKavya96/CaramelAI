@@ -7,7 +7,7 @@ import type { IsolatedWorkspace } from "../workspace";
 import type { ToolObservation } from "./action-dispatcher";
 import { currentState } from "./action-dispatcher";
 import type { AgentEventWriter } from "./events";
-import { isExplorationAction, MAX_UNCHANGED_EXPLORATION_STEPS } from "./policy";
+import { DIRECT_IMPLEMENTATION_GUIDANCE_STEP, isExplorationAction, MAX_UNCHANGED_EXPLORATION_STEPS } from "./policy";
 import type { ProgressTracker } from "./progress";
 import type { AgentStatus } from "./types";
 
@@ -70,9 +70,13 @@ export async function processToolObservation(
     unchangedExplorationSteps = 0;
   } else if (isExplorationAction(action)) {
     unchangedExplorationSteps += 1;
-    if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
+    if (unchangedExplorationSteps === DIRECT_IMPLEMENTATION_GUIDANCE_STEP) {
       memory.recordGuidance(
-        "You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Edit next using a unified diff patch, replace_text with a non-empty exact unique snippet, or replace_file with complete content; finish only if the task cannot be completed.",
+        "Planning is complete. State the issue requirement addressed in intent, inspect at most one missing exact range, and then edit the relevant implementation or focused test.",
+      );
+    } else if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
+      memory.recordGuidance(
+        "The focused inspection phase is complete. Edit now using a unified diff patch, replace_text with a non-empty exact unique snippet, or replace_file with complete content. Tie the edit to the GitHub issue description; finish only if the task cannot be completed.",
       );
     }
   }

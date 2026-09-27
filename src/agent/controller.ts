@@ -134,7 +134,7 @@ export async function runAutonomousTask(
         await events.write("tool_result", { action: decision.action.type, workspaceChanged: false, result: rejection });
         memory.recordObservation(decision.action, rejection);
         memory.recordGuidance(
-          "The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_text, replace_file, inspect_diff, or finish. Prefer replace_text for exact unique snippets; never send an empty search string; use replace_file only with complete corrected file text.",
+          "Focused planning is finished. The next action must directly implement the GitHub issue with apply_patch, replace_text, or replace_file; use inspect_diff or finish only when appropriate. Preserve the issue description and constraints. Prefer replace_text for exact unique snippets; never send an empty search string; use replace_file only with complete corrected file text.",
         );
         if (stagnationInterventions >= budgets.maxStagnationInterventions) {
           status = "partial";

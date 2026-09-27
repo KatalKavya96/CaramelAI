@@ -60,10 +60,15 @@ export function normalizeIssueUrl(input: string): string {
 
 export function formatIssueTask(issue: IssueTask): string {
   return [
+    "GitHub issue implementation contract",
     `Source issue: ${issue.url}`,
-    `Title: ${issue.title}`,
+    `Issue title: ${issue.title}`,
     "",
-    issue.body.trim() || "(No issue body provided.)",
+    "Issue description and acceptance criteria:",
+    issue.body.trim() || "(No issue body provided. Infer only the minimum change required by the title and repository evidence.)",
+    "",
+    "Execution requirement:",
+    "Implement this issue as written. Preserve its constraints, avoid unrelated changes, verify the requested behavior, and review the final diff against this contract before finishing.",
   ].join("\n");
 }
 
