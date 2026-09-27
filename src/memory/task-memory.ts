@@ -180,6 +180,7 @@ export class TaskMemory {
   private summary(): string {
     return clipped({
       originalTask: this.task,
+      taskPriority: "Binding contract: implement every requested behavior and constraint; compare the final diff and checks against this task before finishing.",
       repository: this.repositoryContext,
       failureHistory: this.failures,
       checks: this.checks,

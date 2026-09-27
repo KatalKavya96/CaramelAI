@@ -463,12 +463,15 @@ describe("autonomous agent vertical slice", () => {
     expect(result.status).toBe("partial");
     expect(result.terminationReason).toContain("exploration without code changes");
     expect(result.metrics).toMatchObject({
-      steps: 6,
-      modelCalls: 8,
+      steps: 4,
+      modelCalls: 6,
       stagnationInterventions: 2,
     });
-    expect(model.requests[6]?.messages.map((message) => message.content).join("\n")).toContain(
-      "exploration budget is exhausted",
+    expect(model.requests[3]?.messages.map((message) => message.content).join("\n")).toContain(
+      "Planning is complete",
+    );
+    expect(model.requests[4]?.messages.map((message) => message.content).join("\n")).toContain(
+      "focused inspection phase is complete",
     );
   });
 

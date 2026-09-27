@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { type IssueFetcher, formatIssueTask } from "./issue";
 
 export const DEFAULT_BUDGETS = {
-  maxSteps: 32,
-  maxMinutes: 20,
-  maxModelCalls: 18,
-  maxRepairAttempts: 4,
-  verificationReserveSteps: 3,
-  maxStagnationInterventions: 2,
-  maxContextChars: 32_000,
+  maxSteps: 120,
+  maxMinutes: 60,
+  maxModelCalls: 80,
+  maxRepairAttempts: 12,
+  verificationReserveSteps: 10,
+  maxStagnationInterventions: 6,
+  maxContextChars: 64_000,
 } as const;
 
 export type DeepSeekReasoningEffort = "low" | "medium" | "high";

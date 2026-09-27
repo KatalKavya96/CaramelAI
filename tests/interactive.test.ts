@@ -47,7 +47,7 @@ describe("interactive run wizard", () => {
       "--repository-map", "enabled",
       "--max-steps", "25",
       "--max-model-calls", "10",
-      "--max-minutes", "20",
+      "--max-minutes", "60",
       "--reasoning-effort", "high",
       "--output", "/tmp/run",
     ]);

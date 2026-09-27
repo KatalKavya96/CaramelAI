@@ -33,7 +33,8 @@ export interface ValidatedRunBudgets {
   maxStagnationInterventions: number;
 }
 
-export const MAX_UNCHANGED_EXPLORATION_STEPS = 6;
+export const DIRECT_IMPLEMENTATION_GUIDANCE_STEP = 3;
+export const MAX_UNCHANGED_EXPLORATION_STEPS = 4;
 export const MAX_UNCHANGED_SHELL_FILE_READS = 2;
 
 export function validateRunOptions(options: AutonomousRunOptions): ValidatedRunBudgets {

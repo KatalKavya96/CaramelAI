@@ -45,13 +45,13 @@ Options:
   --task-file <path>         Read the task from a UTF-8 file
   --issue <url>              Fetch a GitHub issue and use it as the task
   --output <path>            Artifact directory (default: unique OS temporary directory)
-  --max-steps <integer>      Maximum agent actions (default: 32)
-  --max-minutes <number>     Wall-clock limit in minutes (default: 20)
-  --max-model-calls <int>    Maximum model calls (default: 18)
-  --max-repair-attempts <n>  Maximum code-related failures (default: 4)
-  --verification-reserve-steps <n>  Steps protected for final checks (default: 3)
-  --max-stagnation-interventions <n> Repeated-action limit (default: 2)
-  --max-context-chars <n>    Approximate request character limit (default: 32000)
+  --max-steps <integer>      Maximum agent actions (default: 120)
+  --max-minutes <number>     Wall-clock limit in minutes (default: 60)
+  --max-model-calls <int>    Maximum model calls (default: 80)
+  --max-repair-attempts <n>  Maximum code-related failures (default: 12)
+  --verification-reserve-steps <n>  Steps protected for final checks (default: 10)
+  --max-stagnation-interventions <n> Repeated-action limit (default: 6)
+  --max-context-chars <n>    Approximate request character limit (default: 64000)
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model

@@ -24,7 +24,12 @@ describe("GitHub issue tasks", () => {
       url: "https://github.com/o/r/issues/1",
       title: "Fix filters",
       body: "Expected outcome here.",
-    })).toContain("Title: Fix filters\n\nExpected outcome here.");
+    })).toContain("Issue title: Fix filters\n\nIssue description and acceptance criteria:\nExpected outcome here.");
+    expect(formatIssueTask({
+      url: "https://github.com/o/r/issues/1",
+      title: "Fix filters",
+      body: "Expected outcome here.",
+    })).toContain("Implement this issue as written");
   });
 
   test("falls back to public issue HTML when the API is blocked", async () => {
