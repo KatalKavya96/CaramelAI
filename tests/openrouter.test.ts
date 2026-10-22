@@ -84,3 +84,18 @@ describe("OpenRouter model transport", () => {
     expect(calls).toBe(3);
   });
 });
+
+describe("OpenRouter rate limits", () => {
+  test("carries the provider's Retry-After into the retry delay", async () => {
+    const { OpenRouterTransport, ModelTransportError } = await import("../src/model");
+    const rateLimited = Object.assign(new Error("Too many requests"), {
+      statusCode: 429,
+      headers: new Headers({ "retry-after": "4" }),
+    });
+    const transport = new OpenRouterTransport({ chat: { send: async () => { throw rateLimited; } } }, "m");
+    const error: any = await transport.send({ messages: [] }, new AbortController().signal).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ModelTransportError);
+    expect(error.kind).toBe("rate_limit");
+    expect(error.retryAfterMs).toBe(4_000);
+  });
+});

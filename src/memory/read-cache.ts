@@ -2,7 +2,6 @@ import type { FileReadResult, RepositoryToolResult } from "../tools";
 
 interface Entry {
   workspaceFingerprint: string;
-  contentFingerprint: string;
   result: RepositoryToolResult<FileReadResult>;
 }
 
@@ -15,10 +14,8 @@ export class RepositoryReadCache {
   }
 
   set(path: string, startLine: number | undefined, endLine: number | undefined, workspaceFingerprint: string, result: RepositoryToolResult<FileReadResult>): void {
-    const content = result.ok ? result.value.content : JSON.stringify(result.error);
     this.entries.set(this.key(path, startLine, endLine), {
       workspaceFingerprint,
-      contentFingerprint: new Bun.CryptoHasher("sha256").update(content).digest("hex"),
       result: structuredClone(result),
     });
   }

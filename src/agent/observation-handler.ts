@@ -134,7 +134,7 @@ export async function processToolObservation(
   if (repetition >= 2) {
     stagnationInterventions += 1;
     memory.recordGuidance(
-      "The same action produced the same outcome on unchanged code. Choose a different investigation or hypothesis; do not repeat it without new evidence.",
+      "This action reproduced an outcome you already saw on the same code (a repeat, or an edit that undoes and redoes a change). Choose a different investigation or hypothesis; do not repeat it without new evidence.",
     );
     if (stagnationInterventions >= ctx.maxStagnationInterventions) {
       memory.recordObservation(action, observation.result);

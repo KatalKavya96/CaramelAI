@@ -4,6 +4,7 @@ import type {
   ModelAdapter,
   ModelRequest,
   ModelTurn,
+  ModelUsage,
   TextTurn,
 } from "./types";
 
@@ -17,29 +18,55 @@ export type ModelErrorKind =
   | "cancelled";
 
 export class ModelError extends Error {
+  /** How long the provider asked us to wait before retrying (from Retry-After), if it said. */
+  readonly retryAfterMs: number | undefined;
+
   constructor(
     public readonly kind: ModelErrorKind,
     message: string,
     public readonly retryable: boolean,
     public readonly attempts: number,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { retryAfterMs?: number | undefined },
   ) {
     super(message, options);
     this.name = "ModelError";
+    this.retryAfterMs = options?.retryAfterMs;
   }
 }
 
 export type ModelTransportErrorKind = "authentication" | "rate_limit" | "transient" | "permanent";
 
 export class ModelTransportError extends Error {
+  readonly retryAfterMs: number | undefined;
+
   constructor(
     public readonly kind: ModelTransportErrorKind,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { retryAfterMs?: number | undefined },
   ) {
     super(message, options);
     this.name = "ModelTransportError";
+    this.retryAfterMs = options?.retryAfterMs;
   }
+}
+
+/** A provider's Retry-After is honoured up to this long; beyond it the run's budget decides. */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/** Reads Retry-After (seconds or an HTTP date) from an SDK error that exposes response headers. */
+export function retryAfterMs(error: unknown, now: number = Date.now()): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const headers = (error as { headers?: unknown }).headers;
+  const value = headers instanceof Headers
+    ? headers.get("retry-after")
+    : typeof headers === "object" && headers !== null
+      ? (headers as Record<string, unknown>)["retry-after"]
+      : undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1_000);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? undefined : Math.max(0, date - now);
 }
 
 export interface ModelTransport {
@@ -88,7 +115,10 @@ function errorFromTransport(error: unknown, attempts: number): ModelError {
       return new ModelError("authentication", error.message, false, attempts, { cause: error });
     }
     if (error.kind === "rate_limit") {
-      return new ModelError("rate_limit", error.message, true, attempts, { cause: error });
+      return new ModelError("rate_limit", error.message, true, attempts, {
+        cause: error,
+        retryAfterMs: error.retryAfterMs,
+      });
     }
     return new ModelError("transport", error.message, error.kind === "transient", attempts, {
       cause: error,
@@ -110,12 +140,21 @@ function transportOutput(value: unknown, attempts: number): Record<string, unkno
   return response;
 }
 
+/** Bad token accounting must not throw away a valid decision; it is recorded as unavailable. */
+function usageOrUnavailable(value: unknown): ModelUsage {
+  try {
+    return parseProviderUsage(value);
+  } catch {
+    return { source: "unavailable" };
+  }
+}
+
 function parseTransportResponse(value: unknown, attempts: number): ModelTurn {
   const response = transportOutput(value, attempts);
   try {
     return {
       decision: parseModelDecision(response.output),
-      usage: parseProviderUsage(response.usage),
+      usage: usageOrUnavailable(response.usage),
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -127,7 +166,7 @@ function parseTextResponse(value: unknown, attempts: number): TextTurn {
   const response = transportOutput(value, attempts);
   try {
     const output = typeof response.output === "string" ? response.output : JSON.stringify(response.output);
-    return { output, usage: parseProviderUsage(response.usage) };
+    return { output, usage: usageOrUnavailable(response.usage) };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new ModelError("invalid_response", detail, false, attempts, { cause: error });
@@ -204,10 +243,9 @@ export class StructuredModelAdapter implements ModelAdapter {
         lastError = modelError;
         if (!modelError.retryable || attempt === this.options.maxAttempts) throw modelError;
 
-        const delay = Math.min(
-          this.options.initialBackoffMs * 2 ** (attempt - 1),
-          this.options.maxBackoffMs,
-        );
+        const delay = modelError.retryAfterMs !== undefined
+          ? Math.min(modelError.retryAfterMs, MAX_RETRY_AFTER_MS)
+          : Math.min(this.options.initialBackoffMs * 2 ** (attempt - 1), this.options.maxBackoffMs);
         const remainingAfterAttempt = this.remainingBudget(startedAt, budget.remainingTimeMs);
         if (remainingAfterAttempt !== undefined && remainingAfterAttempt <= delay) {
           throw new ModelError(

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   FakeModelAdapter,
+  MAX_RETRY_AFTER_MS,
+  retryAfterMs,
   ModelError,
   ModelTransportError,
   StructuredModelAdapter,
@@ -173,5 +175,47 @@ describe("StructuredModelAdapter cancellation", () => {
     expect(error.retryable).toBeFalse();
     expect(calls).toBe(1);
     expect(transportSignal?.aborted).toBeTrue();
+  });
+});
+
+describe("StructuredModelAdapter provider signals", () => {
+  test("waits as long as Retry-After asks on a rate limit, capped", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("rate_limit", "slow down", { retryAfterMs: 7_000 }),
+      new ModelTransportError("rate_limit", "slow down", { retryAfterMs: 600_000 }),
+      SUCCESS,
+    ]);
+    const delays: number[] = [];
+    const adapter = new StructuredModelAdapter(transport, { maxAttempts: 3, initialBackoffMs: 10 }, {
+      sleep: async (delay) => { delays.push(delay); },
+    });
+    await adapter.complete(REQUEST);
+    expect(delays).toEqual([7_000, MAX_RETRY_AFTER_MS]);
+  });
+
+  test("gives up early when Retry-After does not fit the remaining budget", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("rate_limit", "slow down", { retryAfterMs: 30_000 }),
+      SUCCESS,
+    ]);
+    const adapter = new StructuredModelAdapter(transport, {}, { sleep: async () => {} });
+    await expect(adapter.complete(REQUEST, { remainingTimeMs: 5_000 })).rejects.toMatchObject({ kind: "budget_exhausted" });
+    expect(transport.calls).toBe(1);
+  });
+
+  test("parses Retry-After from SDK error headers as seconds or an HTTP date", () => {
+    expect(retryAfterMs({ headers: new Headers({ "retry-after": "3" }) })).toBe(3_000);
+    expect(retryAfterMs({ headers: { "retry-after": "Wed, 21 Oct 2026 07:28:10 GMT" } }, Date.parse("Wed, 21 Oct 2026 07:28:00 GMT"))).toBe(10_000);
+    expect(retryAfterMs({ headers: new Headers() })).toBeUndefined();
+    expect(retryAfterMs(new Error("no headers"))).toBeUndefined();
+  });
+
+  test("keeps a valid decision when the provider's usage numbers are malformed", async () => {
+    const adapter = new StructuredModelAdapter(new ScriptedTransport([
+      { output: SUCCESS.output, usage: { inputTokens: -1, outputTokens: "x", totalTokens: 0 } },
+    ]));
+    const turn = await adapter.complete(REQUEST);
+    expect(turn.decision.action.type).toBe("list_files");
+    expect(turn.usage).toEqual({ source: "unavailable" });
   });
 });
