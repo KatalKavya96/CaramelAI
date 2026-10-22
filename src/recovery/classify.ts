@@ -3,6 +3,8 @@ import type { FailureKind } from "./types";
 
 export function classifyCommandFailure(result: CommandResult): FailureKind | null {
   if (result.status === "completed" && result.exitCode === 0) return null;
+  // Infrastructure failures say nothing about the code, so they never use up repair attempts.
+  if (result.status === "runner_error") return "tool";
   if (result.purpose === "setup") return "setup";
   if (result.purpose === "verification") return "test";
   return "tool";

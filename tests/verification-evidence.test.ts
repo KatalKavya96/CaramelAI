@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createEvidence, discoverChecks, isTrustedVerification, parseTestCounts, verificationStatus } from "../src/verification";
 import type { RepositoryMetadata } from "../src/tools";
 import type { CommandResult } from "../src/execution";
+import { classifyCommandFailure } from "../src/recovery";
 
 function result(overrides: Partial<CommandResult> = {}): CommandResult {
   const output = (preview: string) => ({ preview, previewTruncated: false, logPath: `/tmp/${crypto.randomUUID()}.log`, logTruncated: false, capturedBytes: preview.length });
@@ -51,5 +52,13 @@ describe("verification evidence", () => {
     expect(isTrustedVerification({ command: "bun test", cwd: "src" }, trusted, [])).toBeFalse();
     expect(isTrustedVerification({ command: "npm test", cwd: "." }, trusted, [])).toBeTrue();
     expect(isTrustedVerification({ command: "npm test", cwd: "." }, trusted, ["package.json"])).toBeFalse();
+  });
+});
+
+describe("command failure classification", () => {
+  test("never charges runner errors to the repair budget", () => {
+    expect(classifyCommandFailure(result({ status: "runner_error", exitCode: null }))).toBe("tool");
+    expect(classifyCommandFailure(result({ exitCode: 1 }))).toBe("test");
+    expect(classifyCommandFailure(result())).toBeNull();
   });
 });

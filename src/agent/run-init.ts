@@ -53,7 +53,10 @@ export async function initializeRunContext(
   if (dependencies.onEvent !== undefined) eventOptions.onEvent = dependencies.onEvent;
   const events = await AgentEventWriter.create(eventOptions);
 
-  const repository = await RepositoryTools.create(workspace.workspacePath, {}, { gitDir: workspace.gitDir });
+  const repository = await RepositoryTools.create(workspace.workspacePath, {}, {
+    gitDir: workspace.gitDir,
+    baseRevision: workspace.baselineRevision,
+  });
   const commandExecutor = await (
     dependencies.createCommandExecutor ??
     (async (workspacePath: string, logsPath: string) =>

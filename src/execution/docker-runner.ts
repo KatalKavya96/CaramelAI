@@ -57,6 +57,10 @@ const DEFAULT_OPTIONS = {
   pidsLimit: 256,
 } as const;
 
+// `docker run` exits 125 when Docker itself fails (daemon error, missing image, bad flags),
+// before the command starts. That is an infrastructure failure, not a failing test.
+const DOCKER_RUN_FAILURE_EXIT = 125;
+
 const RESERVED_ENVIRONMENT = new Set(["HOME", "PATH", "CI", "NO_COLOR", "TERM", "TMPDIR"]);
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/i;
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -280,11 +284,19 @@ export class DockerCommandRunner {
       readOnlyMounts.push({ hostPath, containerPath: mount.containerPath });
     }
 
+    const image = options.image ?? DEFAULT_OPTIONS.image;
+    const backend = dependencies.backend ?? new DockerCliBackend();
+    if (!(await backend.imageAvailable(image))) {
+      throw new Error(
+        `Docker image ${image} is unavailable. Start Docker and build the runner image with \`make setup\`.`,
+      );
+    }
+
     return new DockerCommandRunner(
       {
         workspacePath,
         logsPath,
-        image: options.image ?? DEFAULT_OPTIONS.image,
+        image,
         defaultTimeoutMs,
         maxTimeoutMs,
         previewBytes: positiveInteger(options.previewBytes ?? DEFAULT_OPTIONS.previewBytes, "previewBytes"),
@@ -295,7 +307,7 @@ export class DockerCommandRunner {
         network: options.network ?? "bridge",
         readOnlyMounts,
       },
-      dependencies.backend ?? new DockerCliBackend(),
+      backend,
       dependencies.now ?? Date.now,
       dependencies.commandId ?? (() => crypto.randomUUID()),
       dependencies.uid ?? process.getuid?.() ?? 1_000,
@@ -348,6 +360,22 @@ export class DockerCommandRunner {
         validated.timeoutMs,
       );
       const [stdoutResult, stderrResult] = await Promise.all([stdout, stderr]);
+      if (!completion.timedOut && completion.exitCode === DOCKER_RUN_FAILURE_EXIT) {
+        return {
+          commandId,
+          command: request.command,
+          purpose: request.purpose,
+          cwd: validated.cwd,
+          image: this.options.image,
+          status: "runner_error",
+          exitCode: null,
+          durationMs: Math.max(0, this.now() - startedAt),
+          timeoutMs: validated.timeoutMs,
+          stdout: stdoutResult,
+          stderr: stderrResult,
+          error: stderrResult.preview.trim() || "docker run failed before the command started.",
+        };
+      }
 
       return {
         commandId,
