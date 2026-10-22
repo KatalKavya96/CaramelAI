@@ -1,0 +1,7 @@
+.dialogForm { display: flex; flex-direction: column; gap: 16px; }
+.dialogActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.recent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.recentLabel { font-size: var(--text-xs); color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+.mono { font-family: var(--font-mono); font-size: 13px; }
+.pathRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.browse { margin-top: 27px; }

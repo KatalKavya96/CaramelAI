@@ -1,0 +1,2 @@
+.footer { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 0; padding: 24px 0 28px; font-size: var(--text-sm); color: var(--text-muted); }
+.rule { width: 52px; height: 1px; background: var(--border-strong); }

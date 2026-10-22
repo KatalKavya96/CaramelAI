@@ -1,0 +1,5 @@
+.group { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 3px; background: var(--surface-sunken); }
+.segment { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); cursor: pointer; font-size: var(--text-sm); }
+.segment:hover { background: var(--surface-hover); }
+.active, .active:hover { background: var(--accent-tint); }
+:root[data-theme="dark"] .active, :root[data-theme="dark"] .active:hover { background: rgba(255, 255, 255, 0.14); }

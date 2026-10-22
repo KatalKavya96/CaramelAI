@@ -1,0 +1,5 @@
+.kbd {
+  display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 7px;
+  border-radius: var(--radius-xs); background: var(--kbd-bg); color: var(--kbd-text);
+  font: 500 12px var(--font-ui); letter-spacing: 0.02em;
+}

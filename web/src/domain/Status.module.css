@@ -1,0 +1,10 @@
+.neutral { color: var(--text-muted); flex: none; }
+.success { color: var(--success); flex: none; }
+.warning { color: var(--warning); flex: none; }
+.danger { color: var(--danger-icon); flex: none; }
+.badge { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: 500; border: 1px solid var(--chip-border); background: var(--chip-bg); white-space: nowrap; }
+.tone-active { background: var(--accent-tint); border-color: var(--accent-tint-border); }
+.tone-success { background: var(--success-tint); border-color: transparent; }
+.tone-warning { background: var(--warning-tint); border-color: transparent; }
+.tone-danger { background: var(--danger-tint); border-color: var(--danger-tint-border); }
+.detail { font-weight: 400; color: var(--text-muted); font-variant-numeric: tabular-nums; }

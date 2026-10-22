@@ -1,0 +1,50 @@
+/* Screen-level layout only. Components carry their own styles. */
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.note { padding: 12px 16px; border-radius: var(--radius-md); background: var(--accent-tint); border: 1px solid var(--accent-tint-border); font-size: var(--text-sm); margin-bottom: 20px; }
+
+/* Home */
+.home { min-height: 100%; display: flex; flex-direction: column; padding: 18px 24px 20px; }
+.homeCenter { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 28px; padding: 24px 0; }
+.composerWrap { display: flex; flex-direction: column; gap: 12px; }
+.setupCallout { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: var(--radius-lg); border: 1px solid var(--accent-tint-border); background: var(--accent-tint); font-size: var(--text-sm); }
+.setupCallout span { flex: 1; }
+
+/* Sign in */
+.signIn { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; gap: 40px; }
+.signInNote { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+
+/* Run thread */
+.runPage { padding: 24px 28px 0; min-height: 100%; }
+.applyNotice { margin-top: 16px; }
+.thread { display: flex; flex-direction: column; gap: 32px; margin-top: 28px; }
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.streamNote { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.modelErrors { font-size: var(--text-sm); color: var(--text-muted); }
+.modelErrors summary { cursor: pointer; }
+.modelErrors code { font: 12.5px var(--font-mono); }
+.followUp { position: sticky; bottom: 0; padding: 20px 0 20px; display: flex; flex-direction: column; gap: 10px; background: linear-gradient(to bottom, transparent, var(--bg) 30%); }
+.panelNote { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+
+/* Settings */
+.settingRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.settingTitle { margin: 0; font-size: var(--text-md); font-weight: 500; }
+.settingHint { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-muted); }
+.account { display: flex; align-items: center; gap: 14px; }
+
+/* Repositories */
+.repoGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.repoCard { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.repoHead { display: flex; align-items: center; gap: 10px; }
+.repoName { margin: 0; flex: 1; font-size: var(--text-md); font-weight: 600; overflow-wrap: anywhere; }
+.repoRuns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.repoRuns a { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; border-radius: var(--radius-sm); color: var(--text); text-decoration: none; font-size: var(--text-sm); }
+.repoRuns a:hover { background: var(--surface-hover); }
+.repoTask { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repoRuns time { color: var(--text-muted); font-size: var(--text-xs); }
+
+/* Below 900px the shell's mobile header takes over, and the composer keeps its own model pill. */
+@media (max-width: 900px) { .homeTop { display: none; } }
+@media (max-width: 600px) {
+  .home { padding: 12px 16px; }
+  .runPage { padding: 16px 16px 0; }
+}

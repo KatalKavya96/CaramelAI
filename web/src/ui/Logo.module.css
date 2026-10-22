@@ -1,0 +1,3 @@
+.mark { fill: var(--mark); flex: none; display: block; }
+.logo { display: inline-flex; align-items: center; gap: 10px; color: var(--text); }
+.word { font-family: var(--font-brand); font-weight: 700; font-size: 23px; letter-spacing: -0.015em; line-height: 1; }

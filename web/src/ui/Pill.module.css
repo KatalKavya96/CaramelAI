@@ -1,0 +1,14 @@
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  border: 1px solid var(--chip-border); background: var(--chip-bg); color: var(--text);
+  border-radius: var(--radius-pill); cursor: pointer; white-space: nowrap; font-weight: 400;
+  transition: background var(--duration), border-color var(--duration);
+}
+.pill:hover:not(:disabled) { background: var(--surface-hover); }
+.pill:disabled { opacity: 0.55; cursor: not-allowed; }
+.sm { height: 32px; padding: 0 12px; font-size: var(--text-sm); }
+.md { height: 40px; padding: 0 15px; font-size: var(--text-sm); }
+.lg { height: 46px; padding: 0 18px; font-size: var(--text-md); }
+.pressed { background: var(--chip-active-bg); color: var(--chip-active-text); border-color: transparent; }
+.pressed:hover:not(:disabled) { background: var(--chip-active-bg); }
+.text { overflow: hidden; text-overflow: ellipsis; }

@@ -1,0 +1,9 @@
+.notice { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 14px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); }
+.ok { border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.ok > svg { color: var(--success); margin-top: 2px; }
+.bad { border-color: var(--danger-tint-border); background: var(--danger-tint); }
+.bad > svg { color: var(--danger-icon); margin-top: 2px; }
+.title { margin: 0; font-weight: 500; }
+.detail { margin: 4px 0 0; font-size: var(--text-sm); color: var(--text-muted); }
+.detail code, .files code { font: 12.5px var(--font-mono); }
+.files { margin: 6px 0 0; padding-left: 18px; font-size: var(--text-sm); }

@@ -12,7 +12,9 @@
     "test": "bun test",
     "contract": "bun test tests/execution-contract.test.ts",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun test"
+    "check": "bun run typecheck && bun test",
+    "web": "cd web && npm run dev",
+    "web:build": "cd web && npm run build"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
