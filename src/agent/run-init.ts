@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { DockerCommandRunner } from "../execution";
 import { RepositoryReadCache, TaskMemory } from "../memory";
@@ -19,6 +19,8 @@ export interface InitializedRunContext {
   repository: RepositoryTools;
   commandExecutor: CommandExecutor;
   discoveredChecks: DiscoveredCheck[];
+  /** The only checks whose passing evidence can satisfy the completion gate. */
+  trustedChecks: DiscoveredCheck[];
   memory: TaskMemory;
   readCache: RepositoryReadCache;
   progress: ProgressTracker;
@@ -59,12 +61,23 @@ export async function initializeRunContext(
   )(workspace.workspacePath, checksPath);
 
   const metadata = await repository.metadata();
-  const discoveredChecks = metadata.ok ? discoverChecks(metadata.value) : [];
+  const discoveredChecks = metadata.ok
+    ? discoverChecks(metadata.value, { packageJson: await readPackageJson(workspace.workspacePath) })
+    : [];
+  const trustedChecks: DiscoveredCheck[] = options.verificationCommands === undefined
+    ? discoveredChecks
+    : options.verificationCommands.map((command) => ({ command, source: "run configuration", category: "test" }));
   const repositoryMap = options.repositoryMapEnabled === true
     ? await buildRepositoryMap({ repository, task: options.task })
     : null;
 
-  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks, repositoryMap }, {
+  const verificationGate = {
+    trustedCommands: trustedChecks.map((check) => check.command),
+    rule: trustedChecks.length === 0
+      ? "No trusted verification command is configured, so this run cannot finish as verified. Still run the most relevant tests and report the result."
+      : "Only these exact commands, run from the workspace root with purpose verification, can verify the final state. Editing the file that defines a command (such as package.json scripts) makes it untrusted.",
+  };
+  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks, verificationGate, repositoryMap }, {
     ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
   });
 
@@ -87,6 +100,7 @@ export async function initializeRunContext(
     repository,
     commandExecutor,
     discoveredChecks,
+    trustedChecks,
     memory,
     readCache: new RepositoryReadCache(),
     progress: new ProgressTracker(),
@@ -95,4 +109,13 @@ export async function initializeRunContext(
     failures: [],
     verificationEvidence: [],
   };
+}
+
+async function readPackageJson(workspacePath: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(resolve(workspacePath, "package.json"), "utf8"));
+  } catch {
+    // Missing or malformed manifests simply produce no package-script checks.
+    return undefined;
+  }
 }

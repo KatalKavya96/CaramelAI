@@ -20,7 +20,7 @@ describe("agent system prompt", () => {
     expect(SYSTEM_PROMPT).toContain("originalTask as the binding implementation contract");
     expect(SYSTEM_PROMPT).toContain("two to four focused inspection actions");
     expect(SYSTEM_PROMPT).toContain("compare the final diff");
-    expect(SYSTEM_PROMPT).toContain("inspect_diff, then run the most relevant available verification command");
+    expect(SYSTEM_PROMPT).toContain("inspect_diff, then run a command from verificationGate.trustedCommands exactly as listed");
   });
 
   test("codifies code quality, security, and plan context standards", () => {

@@ -2,7 +2,7 @@ import type { CommandResult } from "../execution";
 import type { ModelAction, ModelDecision } from "../model";
 import type { TaskMemory } from "../memory";
 import type { FailureRecord } from "../recovery";
-import { createEvidence, type VerificationEvidence } from "../verification";
+import { createEvidence, isTrustedVerification, type DiscoveredCheck, type VerificationEvidence } from "../verification";
 import type { IsolatedWorkspace } from "../workspace";
 import type { ToolObservation } from "./action-dispatcher";
 import { currentState } from "./action-dispatcher";
@@ -21,6 +21,7 @@ export interface ToolObservationContext {
   events: AgentEventWriter;
   failures: FailureRecord[];
   verificationEvidence: VerificationEvidence[];
+  trustedChecks: readonly DiscoveredCheck[];
   maxStagnationInterventions: number;
   maxRepairAttempts: number;
 }
@@ -96,16 +97,30 @@ export async function processToolObservation(
     verificationCommandsIncrement += 1;
     lastVerification = observation.verification;
     const state = await currentState(workspace);
+    const trusted = isTrustedVerification(observation.verification, ctx.trustedChecks, state.changedFiles);
     const evidence = createEvidence({
       result: observation.verification,
       codeFingerprint: state.patchSha256,
       baseline: state.changedFiles.length === 0,
+      trusted,
     });
     verificationEvidence.push(evidence);
     memory.recordCheck(evidence);
-    verifiedPatchSha = evidence.status === "passed" && !observation.workspaceChanged
-      ? state.patchSha256
-      : null;
+    if (trusted) {
+      verifiedPatchSha = evidence.status === "passed" && !observation.workspaceChanged
+        ? state.patchSha256
+        : null;
+    } else if (evidence.status === "failed" || evidence.status === "timed_out") {
+      // Trust is asymmetric: an untrusted command cannot prove success, but its failure still counts against it.
+      verifiedPatchSha = null;
+    }
+    if (!trusted) {
+      memory.recordGuidance(
+        `"${evidence.command}" is not a trusted verification command, so it cannot verify the final state. Trusted commands: ${
+          ctx.trustedChecks.length === 0 ? "none configured" : ctx.trustedChecks.map((check) => check.command).join(", ")
+        }.`,
+      );
+    }
   }
 
   await events.write("tool_result", {

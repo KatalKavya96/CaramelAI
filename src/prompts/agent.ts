@@ -43,7 +43,7 @@ Progress and recovery:
 - Do not ask the user questions during the run; act from the issue text, repository evidence, and any plan context provided.
 
 Verification and finish:
-- After the final edit, inspect_diff, then run the most relevant available verification command.
+- After the final edit, inspect_diff, then run a command from verificationGate.trustedCommands exactly as listed, from the workspace root. Other commands are useful for investigation but never count as verification.
 - Label commands as setup, agent, or verification.
 - Never claim a check passed unless its observed tool result says it passed.
 - Finish only after the final diff has been inspected and verification has run, or explain clearly why completion is partial.

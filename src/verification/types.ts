@@ -28,10 +28,14 @@ export interface VerificationEvidence {
   stderrLogPath: string;
   testCounts: ParsedTestCounts | null;
   baseline: boolean;
+  /** True only when the controller, not the model, chose this command as a completion check. */
+  trusted: boolean;
 }
 
 export interface DiscoveredCheck {
   command: string;
   source: string;
   category: "test" | "build" | "lint" | "typecheck";
+  /** Workspace file whose contents define what this command runs, such as package.json for `npm test`. */
+  definedBy?: string;
 }

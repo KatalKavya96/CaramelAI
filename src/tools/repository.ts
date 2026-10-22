@@ -57,6 +57,8 @@ const MANIFEST_CANDIDATES = [
   "requirements-dev.txt",
   "Pipfile",
   "poetry.lock",
+  "Cargo.toml",
+  "go.mod",
 ];
 
 const TEST_CONFIG_CANDIDATES = [

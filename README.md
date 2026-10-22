@@ -105,6 +105,8 @@ AI_API_KEY="$AI_API_KEY" bun run src/cli.ts run \
   --max-context-chars 64000
 ```
 
+The completion gate only trusts verification commands chosen by the harness: checks discovered from the repository's manifests (for example the `scripts.test` entry of `package.json`), or the single command passed with `--verify "<command>"`. A model may run any other command, but it never counts as verification, and editing the file that defines a trusted command (such as `package.json`) makes that command untrusted for the run.
+
 Additional controls include `--max-repair-attempts`, `--verification-reserve-steps`, `--max-stagnation-interventions`, `--max-context-chars`, `--repository-map enabled`, `--reasoning-effort medium`, and `--color disabled`. Run `make run ARGS="--help"` for the authoritative list.
 
 The experimental `--repository-map enabled` option adds bounded, ranked source-file and symbol candidates to the initial model context. It remains disabled by default: development-fixture localization improved from 0/6 metadata-only candidates to 6/6 relevant files in the top three, but this surrogate comparison does not establish a solve-rate or token improvement. The comparison and limitations are recorded in `benchmarks/reports/localization-comparison-2026-09-26.json`.

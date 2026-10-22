@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { CommandResult } from "../execution";
-import { evidenceForFinalState } from "../verification";
+import { finalStateVerified } from "../verification";
 import { currentState } from "./action-dispatcher";
 import type { InitializedRunContext } from "./run-init";
 import { renderEvidenceReport } from "./report";
@@ -70,10 +70,9 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
     : { patchPath: resolve(workspace.runRoot, "patch.diff"), changedFiles: [] };
 
   const finalState = await currentState(workspace);
-  const finalEvidence = evidenceForFinalState(context.verificationEvidence, finalState.patchSha256);
   const successfulFinalState =
     finalState.changedFiles.length > 0 &&
-    finalEvidence.at(-1)?.status === "passed" &&
+    finalStateVerified(context.verificationEvidence, finalState.patchSha256) &&
     options.diffReviewedPatchSha === finalState.patchSha256;
 
   const resultPath = resolve(workspace.runRoot, "result.json");

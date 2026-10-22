@@ -38,6 +38,19 @@ describe("loadRunConfig", () => {
     expect(config.model).toBe("openai/gpt-5.2");
   });
 
+  test("accepts one explicit verification command", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--verify", "  pytest -q tests  "],
+      cwd,
+      env: { AI_API_KEY: "secret" },
+    });
+    expect(config.verificationCommands).toEqual(["pytest -q tests"]);
+    await expect(
+      loadRunConfig({ argv: ["--repo", ".", "--task", "Fix it", "--verify", " "], cwd, env: { AI_API_KEY: "secret" } }),
+    ).rejects.toThrow(ConfigurationError);
+  });
+
   test("loads a fetched issue as the task", async () => {
     const cwd = await temporaryDirectory();
     const config = await loadRunConfig({
