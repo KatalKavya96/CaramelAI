@@ -1,6 +1,8 @@
-import type { ModelAdapter, ModelRequest } from "../model";
+import { z } from "zod";
+import type { ModelAdapter, ModelRequest, ResponseFormat } from "../model";
 import { PLAN_SYSTEM_PROMPT } from "../prompts";
-import { parsePlanResponse } from "./plan-parser";
+import { buildRepositoryMap, RepositoryTools } from "../tools";
+import { parsePlanResponse, PlanResponseSchema } from "./plan-parser";
 import type { AgentPlan, PlanQuestion } from "./types";
 
 export { PLAN_SYSTEM_PROMPT } from "../prompts";
@@ -20,85 +22,70 @@ export function formatPlanContext(plan: AgentPlan): string {
   return lines.join("\n");
 }
 
+export interface GeneratedPlan {
+  summary: string;
+  questions: PlanQuestion[];
+  /** Set when no plan could be produced, so the caller can say why instead of failing silently. */
+  skippedReason?: string;
+}
+
+const PLAN_RESPONSE_FORMAT: ResponseFormat = {
+  name: "caramel_plan",
+  description: "A short plan summary and clarifying questions with options.",
+  schema: (() => {
+    const { $schema: _dialect, ...schema } = z.toJSONSchema(PlanResponseSchema, { io: "input" });
+    return schema;
+  })(),
+};
+
+/**
+ * Plan mode goes through the same ModelAdapter as the run, so it gets the provider's base URL,
+ * timeouts, retries and error mapping instead of a second hand-rolled HTTP client.
+ */
 export async function generatePlan(options: {
   model: ModelAdapter;
   task: string;
   repositoryContext: unknown;
   remainingTimeMs?: number;
-}): Promise<{ summary: string; questions: PlanQuestion[] }> {
+}): Promise<GeneratedPlan> {
+  const skipped = (reason: string): GeneratedPlan => ({
+    summary: "Plan generation was skipped. Proceeding with direct execution.",
+    questions: [],
+    skippedReason: reason,
+  });
+  if (options.model.completeText === undefined) return skipped("The model does not support plan mode.");
+
   const request: ModelRequest = {
     messages: [
       { role: "system", content: PLAN_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: JSON.stringify({
-          task: options.task,
-          repository: options.repositoryContext,
-        }),
-      },
+      { role: "user", content: JSON.stringify({ task: options.task, repository: options.repositoryContext }) },
     ],
+    responseFormat: PLAN_RESPONSE_FORMAT,
   };
-
   try {
-    const turn = await options.model.complete(request, {
-      remainingTimeMs: options.remainingTimeMs ?? 60_000,
-    });
-    const output = JSON.stringify(turn.decision);
-    return parsePlanResponse(output);
-  } catch {
-    return {
-      summary: "Plan generation was skipped. Proceeding with direct execution.",
-      questions: [],
-    };
+    const turn = await options.model.completeText(request, { remainingTimeMs: options.remainingTimeMs ?? 60_000 });
+    return parsePlanResponse(turn.output);
+  } catch (error) {
+    return skipped(error instanceof Error ? error.message : String(error));
   }
 }
 
-export async function generatePlanRaw(options: {
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-  task: string;
-  repositoryContext: unknown;
-}): Promise<{ summary: string; questions: PlanQuestion[] }> {
+/**
+ * What the planner sees of the repository: manifests, test setup and the files most related to the
+ * task. Read-only and best-effort; a failure just yields a thinner context, never a failed run.
+ */
+export async function planRepositoryContext(repoPath: string, task: string): Promise<unknown> {
   try {
-    const response = await fetch(`${options.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${options.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model,
-        messages: [
-          { role: "system", content: PLAN_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify({
-              task: options.task,
-              repository: options.repositoryContext,
-            }),
-          },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.0,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      return { summary: "Plan generation failed — proceeding with direct execution.", questions: [] };
-    }
-
-    const result = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+    const repository = await RepositoryTools.create(repoPath);
+    const metadata = await repository.metadata();
+    const map = await buildRepositoryMap({ repository, task }).catch(() => null);
+    return {
+      branch: metadata.ok ? metadata.value.branch : null,
+      manifests: metadata.ok ? metadata.value.manifests : [],
+      testConfigs: metadata.ok ? metadata.value.testConfigs : [],
+      repositoryMap: map,
     };
-    const content = result.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || content.trim() === "") {
-      return { summary: "No plan generated — proceeding with direct execution.", questions: [] };
-    }
-
-    return parsePlanResponse(content);
   } catch {
-    return { summary: "Plan generation was skipped. Proceeding with direct execution.", questions: [] };
+    return {};
   }
 }

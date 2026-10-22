@@ -4,6 +4,7 @@ import type {
   ModelAdapter,
   ModelRequest,
   ModelTurn,
+  TextTurn,
 } from "./types";
 
 export type ModelErrorKind =
@@ -92,7 +93,7 @@ function errorFromTransport(error: unknown, attempts: number): ModelError {
   return new ModelError("transport", detail, true, attempts, { cause: error });
 }
 
-function parseTransportResponse(value: unknown, attempts: number): ModelTurn {
+function transportOutput(value: unknown, attempts: number): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ModelError("invalid_response", "Provider response must be an object.", false, attempts);
   }
@@ -101,12 +102,27 @@ function parseTransportResponse(value: unknown, attempts: number): ModelTurn {
   if (!("output" in response)) {
     throw new ModelError("invalid_response", "Provider response is missing output.", false, attempts);
   }
+  return response;
+}
 
+function parseTransportResponse(value: unknown, attempts: number): ModelTurn {
+  const response = transportOutput(value, attempts);
   try {
     return {
       decision: parseModelDecision(response.output),
       usage: parseProviderUsage(response.usage),
     };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ModelError("invalid_response", detail, false, attempts, { cause: error });
+  }
+}
+
+function parseTextResponse(value: unknown, attempts: number): TextTurn {
+  const response = transportOutput(value, attempts);
+  try {
+    const output = typeof response.output === "string" ? response.output : JSON.stringify(response.output);
+    return { output, usage: parseProviderUsage(response.usage) };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new ModelError("invalid_response", detail, false, attempts, { cause: error });
@@ -143,6 +159,18 @@ export class StructuredModelAdapter implements ModelAdapter {
   }
 
   async complete(request: ModelRequest, budget: CompletionBudget = {}): Promise<ModelTurn> {
+    return await this.withRetries(request, budget, parseTransportResponse);
+  }
+
+  async completeText(request: ModelRequest, budget: CompletionBudget = {}): Promise<TextTurn> {
+    return await this.withRetries(request, budget, parseTextResponse);
+  }
+
+  private async withRetries<T>(
+    request: ModelRequest,
+    budget: CompletionBudget,
+    parse: (response: unknown, attempts: number) => T,
+  ): Promise<T> {
     const startedAt = this.now();
     let lastError: ModelError | undefined;
 
@@ -164,7 +192,7 @@ export class StructuredModelAdapter implements ModelAdapter {
 
       try {
         const response = await this.sendWithTimeout(request, timeoutMs, attempt);
-        return parseTransportResponse(response, attempt);
+        return parse(response, attempt);
       } catch (error) {
         const modelError = errorFromTransport(error, attempt);
         lastError = modelError;

@@ -5,13 +5,14 @@ import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import {
   createAgentEventRenderer,
   formatPlanContext,
-  generatePlanRaw,
+  generatePlan,
+  planRepositoryContext,
   loadFakeModelScript,
   runAutonomousTask,
   type AgentPlan,
   type PlanAnswer,
 } from "./agent";
-import { createDeepSeekModel, createOpenRouterModel, createQwenModel, DEEPSEEK_BASE_URL } from "./model";
+import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "./model";
 import { fetchGitHubIssueTask, type IssueFetcher } from "./issue";
 import {
   collectInteractiveRunArguments,
@@ -198,17 +199,14 @@ export async function runCli(
       const select = createArrowKeySelector({ color: config.colorEnabled });
 
       stdout("\n⏳ Generating plan from issue analysis...\n");
-      const baseUrl = config.provider === "deepseek" ? DEEPSEEK_BASE_URL
-        : config.provider === "qwen" ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        : "https://openrouter.ai/api/v1";
-
-      const planResult = await generatePlanRaw({
-        apiKey: config.apiKey,
-        baseUrl,
-        model: config.model,
+      const planResult = await generatePlan({
+        model,
         task: config.task,
-        repositoryContext: { repoPath: config.repoPath },
+        repositoryContext: await planRepositoryContext(config.repoPath, config.task),
       });
+      if (planResult.skippedReason !== undefined) {
+        stdout(`\n⚠️  Plan generation skipped: ${planResult.skippedReason}\n`);
+      }
 
       if (planResult.questions.length > 0) {
         stdout(renderPlanSummary(planResult, { color: config.colorEnabled }));
