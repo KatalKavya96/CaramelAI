@@ -30,6 +30,14 @@ export async function currentState(workspace: IsolatedWorkspace): Promise<Worksp
   return state.value;
 }
 
+export const UNAVAILABLE_FINGERPRINT = "unavailable";
+
+/** For error paths: a failure while recording a failure must not replace the original error. */
+export async function safeFingerprint(workspace: IsolatedWorkspace): Promise<string> {
+  const state = await workspace.inspectChanges();
+  return state.ok ? state.value.patchSha256 : UNAVAILABLE_FINGERPRINT;
+}
+
 async function executeFileSystemAction(
   action: Extract<ModelAction, { type: "list_files" | "search" | "read_file" | "inspect_diff" }>,
   repository: RepositoryTools,

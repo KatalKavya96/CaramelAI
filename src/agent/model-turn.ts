@@ -2,7 +2,7 @@ import { ModelError, type ModelAdapter, type ModelDecision } from "../model";
 import type { TaskMemory } from "../memory";
 import type { FailureRecord } from "../recovery";
 import type { IsolatedWorkspace } from "../workspace";
-import { currentState } from "./action-dispatcher";
+import { safeFingerprint } from "./action-dispatcher";
 import type { AgentEventWriter } from "./events";
 import { statusForModelError } from "./policy";
 import { recordUsage, type AgentStatus, type UsageSummary } from "./types";
@@ -56,7 +56,7 @@ export async function executeModelTurn(
       hypothesis: null,
       action: "model_call",
       detail: `${modelError.kind}: ${modelError.message}`,
-      codeFingerprint: (await currentState(workspace)).patchSha256,
+      codeFingerprint: await safeFingerprint(workspace),
       countsAgainstRepairLimit: false,
     };
     failures.push(failure);
