@@ -74,9 +74,17 @@ async function canonicalizeProspectivePath(path: string): Promise<string> {
   return resolve(await realpath(ancestor), ...missingSegments);
 }
 
+// Git metadata belongs to the host. A model edit there could plant config that host git executes.
+function touchesGitMetadata(path: string): boolean {
+  return path.split(/[\\/]+/).some((segment) => segment.toLowerCase() === ".git");
+}
+
 async function workspaceEditPath(root: string, path: string): Promise<string> {
   if (path.trim() === "" || isAbsolute(path)) {
     throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement path must be a relative repository path.");
+  }
+  if (touchesGitMetadata(path)) {
+    throw new WorkspaceException("REPLACEMENT_REJECTED", `Replacement path must not touch git metadata: ${path}`);
   }
   const target = await canonicalizeProspectivePath(resolve(root, path));
   if (!isInside(root, target)) {
@@ -85,17 +93,35 @@ async function workspaceEditPath(root: string, path: string): Promise<string> {
   return target;
 }
 
+/**
+ * Where host git finds the workspace repository. The git directory lives outside the
+ * workspace (and so outside the container mount), and is always passed explicitly so
+ * git never discovers a `.git` entry the agent could have created inside the workspace.
+ */
+interface GitLocation {
+  workTree: string;
+  gitDir: string;
+}
+
+// Defence in depth: even trusted config must not run hooks or an fsmonitor command.
+const HARDENED_GIT_CONFIG = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"] as const;
+
 async function runGit(
   cwd: string,
   args: readonly string[],
   input?: string,
+  location?: GitLocation,
 ): Promise<GitResult> {
-  const process = Bun.spawn(["git", ...args], {
+  const process = Bun.spawn(["git", ...(location === undefined ? [] : HARDENED_GIT_CONFIG), ...args], {
     cwd,
     stdin: input === undefined ? "ignore" : "pipe",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...Bun.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: {
+      ...Bun.env,
+      GIT_OPTIONAL_LOCKS: "0",
+      ...(location === undefined ? {} : { GIT_DIR: location.gitDir, GIT_WORK_TREE: location.workTree }),
+    },
   });
   if (input !== undefined && process.stdin !== undefined && typeof process.stdin !== "number") {
     process.stdin.write(input);
@@ -109,8 +135,13 @@ async function runGit(
   return { exitCode, stdout, stderr };
 }
 
-async function requireGit(cwd: string, args: readonly string[], input?: string): Promise<string> {
-  const result = await runGit(cwd, args, input);
+async function requireGit(
+  cwd: string,
+  args: readonly string[],
+  input?: string,
+  location?: GitLocation,
+): Promise<string> {
+  const result = await runGit(cwd, args, input, location);
   if (result.exitCode !== 0) {
     throw new WorkspaceException(
       "GIT_ERROR",
@@ -178,9 +209,9 @@ async function copyRepositoryEntry(sourceRoot: string, targetRoot: string, path:
   );
 }
 
-async function changedFiles(workspacePath: string, baselineRevision: string): Promise<string[]> {
-  await requireGit(workspacePath, ["add", "-A", "--", "."]);
-  const output = await requireGit(workspacePath, [
+async function changedFiles(location: GitLocation, baselineRevision: string): Promise<string[]> {
+  await requireGit(location.workTree, ["add", "-A", "--", "."], undefined, location);
+  const output = await requireGit(location.workTree, [
     "diff",
     "--cached",
     "--name-only",
@@ -188,13 +219,13 @@ async function changedFiles(workspacePath: string, baselineRevision: string): Pr
     baselineRevision,
     "--",
     ".",
-  ]);
+  ], undefined, location);
   return output.split("\0").filter(Boolean).sort();
 }
 
-async function patchFromBaseline(workspacePath: string, baselineRevision: string): Promise<string> {
-  await requireGit(workspacePath, ["add", "-A", "--", "."]);
-  return await requireGit(workspacePath, [
+async function patchFromBaseline(location: GitLocation, baselineRevision: string): Promise<string> {
+  await requireGit(location.workTree, ["add", "-A", "--", "."], undefined, location);
+  return await requireGit(location.workTree, [
     "diff",
     "--cached",
     "--binary",
@@ -202,7 +233,7 @@ async function patchFromBaseline(workspacePath: string, baselineRevision: string
     baselineRevision,
     "--",
     ".",
-  ]);
+  ], undefined, location);
 }
 
 export class IsolatedWorkspace {
@@ -211,7 +242,9 @@ export class IsolatedWorkspace {
   readonly workspacePath: string;
   readonly runRoot: string;
   readonly baselineRevision: string;
+  readonly gitDir: string;
   private readonly checkpointsPath: string;
+  private readonly git: GitLocation;
 
   private constructor(snapshot: WorkspaceSnapshot) {
     this.sourcePath = snapshot.sourcePath;
@@ -219,6 +252,8 @@ export class IsolatedWorkspace {
     this.workspacePath = snapshot.workspacePath;
     this.runRoot = snapshot.runRoot;
     this.baselineRevision = snapshot.baselineRevision;
+    this.gitDir = snapshot.gitDir;
+    this.git = { workTree: snapshot.workspacePath, gitDir: snapshot.gitDir };
     this.checkpointsPath = resolve(this.runRoot, "checkpoints");
   }
 
@@ -254,39 +289,45 @@ export class IsolatedWorkspace {
       await mkdir(dirname(runRoot), { recursive: true });
       temporaryRoot = `${runRoot}.initializing-${crypto.randomUUID()}`;
       const temporaryWorkspace = resolve(temporaryRoot, "workspace");
+      const temporaryGitDir = resolve(temporaryRoot, "git");
       await mkdir(temporaryRoot);
-      const clone = await runGit(dirname(temporaryWorkspace), [
+      const clone = await runGit(temporaryRoot, [
         "clone",
         "--quiet",
         "--no-hardlinks",
         "--no-checkout",
+        `--separate-git-dir=${temporaryGitDir}`,
         sourcePath,
         temporaryWorkspace,
       ]);
       if (clone.exitCode !== 0) {
         throw new WorkspaceException("GIT_ERROR", clone.stderr.trim() || "Unable to clone source.");
       }
+      // The clone leaves a `.git` pointer file in the workspace. Remove it: host git is always
+      // given GIT_DIR explicitly, and nothing inside the workspace may point at git metadata.
+      await rm(resolve(temporaryWorkspace, ".git"), { force: true });
+      const location: GitLocation = { workTree: temporaryWorkspace, gitDir: temporaryGitDir };
 
       const originalRevision = await sourceRevision(sourcePath);
       if (originalRevision !== null) {
-        await requireGit(temporaryWorkspace, ["checkout", "--quiet", "--detach", originalRevision]);
+        await requireGit(temporaryWorkspace, ["checkout", "--quiet", "--detach", originalRevision], undefined, location);
       }
       for (const path of await repositoryFiles(sourcePath)) {
         await copyRepositoryEntry(sourcePath, temporaryWorkspace, path);
       }
 
-      await requireGit(temporaryWorkspace, ["config", "user.name", "Dinner Harness"]);
-      await requireGit(temporaryWorkspace, ["config", "user.email", "harness@example.invalid"]);
-      await requireGit(temporaryWorkspace, ["add", "-A", "--", "."]);
+      await requireGit(temporaryWorkspace, ["config", "user.name", "Dinner Harness"], undefined, location);
+      await requireGit(temporaryWorkspace, ["config", "user.email", "harness@example.invalid"], undefined, location);
+      await requireGit(temporaryWorkspace, ["add", "-A", "--", "."], undefined, location);
       await requireGit(temporaryWorkspace, [
         "commit",
         "--quiet",
         "--allow-empty",
         "-m",
         "Dinner input snapshot",
-      ]);
+      ], undefined, location);
       const baselineRevision = (
-        await requireGit(temporaryWorkspace, ["rev-parse", "HEAD"])
+        await requireGit(temporaryWorkspace, ["rev-parse", "HEAD"], undefined, location)
       ).trim();
       await mkdir(resolve(temporaryRoot, "checkpoints"));
       await rename(temporaryRoot, runRoot);
@@ -297,6 +338,7 @@ export class IsolatedWorkspace {
           sourcePath,
           sourceRevision: originalRevision,
           workspacePath: resolve(runRoot, "workspace"),
+          gitDir: resolve(runRoot, "git"),
           runRoot,
           baselineRevision,
         }),
@@ -316,6 +358,7 @@ export class IsolatedWorkspace {
         this.workspacePath,
         ["apply", "--check", "--binary", "--whitespace=nowarn", "-"],
         patch,
+        this.git,
       );
       if (check.exitCode !== 0) {
         throw new WorkspaceException(
@@ -327,6 +370,7 @@ export class IsolatedWorkspace {
         this.workspacePath,
         ["apply", "--binary", "--whitespace=nowarn", "-"],
         patch,
+        this.git,
       );
       if (applied.exitCode !== 0) {
         throw new WorkspaceException(
@@ -334,7 +378,7 @@ export class IsolatedWorkspace {
           applied.stderr.trim() || "Patch application failed.",
         );
       }
-      return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
+      return success({ changedFiles: await changedFiles(this.git, this.baselineRevision) });
     } catch (error) {
       return failure(error);
     }
@@ -376,7 +420,7 @@ export class IsolatedWorkspace {
 
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, content);
-      return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
+      return success({ changedFiles: await changedFiles(this.git, this.baselineRevision) });
     } catch (error) {
       return failure(error);
     }
@@ -417,7 +461,7 @@ export class IsolatedWorkspace {
         throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement content is unchanged.");
       }
       await writeFile(target, next);
-      return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
+      return success({ changedFiles: await changedFiles(this.git, this.baselineRevision) });
     } catch (error) {
       return failure(error);
     }
@@ -428,7 +472,7 @@ export class IsolatedWorkspace {
       if (label.trim() === "") {
         throw new WorkspaceException("CHECKPOINT_INVALID", "Checkpoint label must not be empty.");
       }
-      const patch = await patchFromBaseline(this.workspacePath, this.baselineRevision);
+      const patch = await patchFromBaseline(this.git, this.baselineRevision);
       const id = crypto.randomUUID();
       const patchPath = resolve(this.checkpointsPath, `${id}.patch`);
       await writeFile(patchPath, patch, { flag: "wx" });
@@ -437,7 +481,7 @@ export class IsolatedWorkspace {
         label: label.trim(),
         patchPath,
         patchSha256: sha256(patch),
-        changedFiles: await changedFiles(this.workspacePath, this.baselineRevision),
+        changedFiles: await changedFiles(this.git, this.baselineRevision),
       });
     } catch (error) {
       return failure(error);
@@ -446,10 +490,10 @@ export class IsolatedWorkspace {
 
   async inspectChanges(): Promise<WorkspaceResult<WorkspaceState>> {
     try {
-      const patch = await patchFromBaseline(this.workspacePath, this.baselineRevision);
+      const patch = await patchFromBaseline(this.git, this.baselineRevision);
       return success({
         patchSha256: sha256(patch),
-        changedFiles: await changedFiles(this.workspacePath, this.baselineRevision),
+        changedFiles: await changedFiles(this.git, this.baselineRevision),
         bytes: Buffer.byteLength(patch),
       });
     } catch (error) {
@@ -468,16 +512,17 @@ export class IsolatedWorkspace {
         throw new WorkspaceException("CHECKPOINT_INVALID", "Checkpoint content hash does not match.");
       }
 
-      await requireGit(this.workspacePath, ["reset", "--hard", "--quiet", this.baselineRevision]);
-      await requireGit(this.workspacePath, ["clean", "-fd", "--quiet"]);
+      await requireGit(this.workspacePath, ["reset", "--hard", "--quiet", this.baselineRevision], undefined, this.git);
+      await requireGit(this.workspacePath, ["clean", "-fd", "--quiet"], undefined, this.git);
       if (patch.length > 0) {
         await requireGit(
           this.workspacePath,
           ["apply", "--binary", "--whitespace=nowarn", "-"],
           patch,
+          this.git,
         );
       }
-      const restoredFiles = await changedFiles(this.workspacePath, this.baselineRevision);
+      const restoredFiles = await changedFiles(this.git, this.baselineRevision);
       return success({ changedFiles: restoredFiles });
     } catch (error) {
       return failure(error);
@@ -493,13 +538,13 @@ export class IsolatedWorkspace {
           "Patch export must be inside the run output and outside the target workspace.",
         );
       }
-      const patch = await patchFromBaseline(this.workspacePath, this.baselineRevision);
+      const patch = await patchFromBaseline(this.git, this.baselineRevision);
       await mkdir(dirname(patchPath), { recursive: true });
       await writeFile(patchPath, patch);
       return success({
         patchPath,
         patchSha256: sha256(patch),
-        changedFiles: await changedFiles(this.workspacePath, this.baselineRevision),
+        changedFiles: await changedFiles(this.git, this.baselineRevision),
         bytes: Buffer.byteLength(patch),
       });
     } catch (error) {

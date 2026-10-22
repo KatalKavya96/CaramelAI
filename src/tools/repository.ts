@@ -168,13 +168,25 @@ async function captureStream(stream: ReadableStream<Uint8Array>, limit: number):
   return { text, truncated };
 }
 
-async function runGit(root: string, args: string[], outputLimit: number): Promise<CapturedProcess> {
-  const process = Bun.spawn(["git", ...args], {
+// Defence in depth: never run hooks or an fsmonitor command from repository config.
+const HARDENED_GIT_CONFIG = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"] as const;
+
+async function runGit(
+  root: string,
+  args: string[],
+  outputLimit: number,
+  gitDir: string | undefined,
+): Promise<CapturedProcess> {
+  const process = Bun.spawn(["git", ...HARDENED_GIT_CONFIG, ...args], {
     cwd: root,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...Bun.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: {
+      ...Bun.env,
+      GIT_OPTIONAL_LOCKS: "0",
+      ...(gitDir === undefined ? {} : { GIT_DIR: gitDir, GIT_WORK_TREE: root }),
+    },
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     captureStream(process.stdout, outputLimit),
@@ -193,11 +205,17 @@ export class RepositoryTools {
   private constructor(
     readonly rootPath: string,
     private readonly limits: Required<RepositoryToolLimits>,
+    private readonly gitDir: string | undefined,
   ) {}
 
+  /**
+   * `options.gitDir` points git at metadata kept outside `rootPath` (an isolated workspace).
+   * Without it, git discovers the repository from `rootPath` as usual.
+   */
   static async create(
     rootPath: string,
     limits: RepositoryToolLimits = {},
+    options: { gitDir?: string } = {},
   ): Promise<RepositoryTools> {
     const canonicalRoot = await realpath(resolve(rootPath));
     if (!(await stat(canonicalRoot)).isDirectory()) {
@@ -212,7 +230,7 @@ export class RepositoryTools {
       maxSearchResults: positiveInteger(merged.maxSearchResults, "maxSearchResults"),
       maxSearchFiles: positiveInteger(merged.maxSearchFiles, "maxSearchFiles"),
       maxSearchFileBytes: positiveInteger(merged.maxSearchFileBytes, "maxSearchFileBytes"),
-    });
+    }, options.gitDir === undefined ? undefined : await realpath(resolve(options.gitDir)));
   }
 
   async listFiles(options: { path?: string; maxDepth?: number } = {}): Promise<RepositoryToolResult<FileListResult>> {
@@ -412,7 +430,7 @@ export class RepositoryTools {
   async inspectDiff(): Promise<RepositoryToolResult<RepositoryDiff>> {
     try {
       await this.assertGitRepository();
-      const head = await runGit(this.rootPath, ["rev-parse", "--verify", "HEAD"], 1_024);
+      const head = await runGit(this.rootPath, ["rev-parse", "--verify", "HEAD"], 1_024, this.gitDir);
       const diffCommands =
         head.exitCode === 0
           ? [["diff", "HEAD", "--no-ext-diff", "--binary", "--", "."]]
@@ -422,12 +440,13 @@ export class RepositoryTools {
             ];
       const [diffs, untracked] = await Promise.all([
         Promise.all(
-          diffCommands.map((args) => runGit(this.rootPath, args, this.limits.maxOutputBytes)),
+          diffCommands.map((args) => runGit(this.rootPath, args, this.limits.maxOutputBytes, this.gitDir)),
         ),
         runGit(
           this.rootPath,
           ["ls-files", "--others", "--exclude-standard", "-z"],
           this.limits.maxOutputBytes,
+          this.gitDir,
         ),
       ]);
       const failedDiff = diffs.find((diff) => diff.exitCode !== 0);
@@ -470,9 +489,9 @@ export class RepositoryTools {
     try {
       await this.assertGitRepository();
       const [revision, branch, status] = await Promise.all([
-        runGit(this.rootPath, ["rev-parse", "--verify", "HEAD"], 1_024),
-        runGit(this.rootPath, ["branch", "--show-current"], 1_024),
-        runGit(this.rootPath, ["status", "--porcelain=v1", "-z"], this.limits.maxOutputBytes),
+        runGit(this.rootPath, ["rev-parse", "--verify", "HEAD"], 1_024, this.gitDir),
+        runGit(this.rootPath, ["branch", "--show-current"], 1_024, this.gitDir),
+        runGit(this.rootPath, ["status", "--porcelain=v1", "-z"], this.limits.maxOutputBytes, this.gitDir),
       ]);
       if (status.exitCode !== 0) {
         throw new RepositoryToolException("GIT_ERROR", status.stderr.trim() || "git status failed.");
@@ -547,7 +566,7 @@ export class RepositoryTools {
   }
 
   private async assertGitRepository(): Promise<void> {
-    const topLevel = await runGit(this.rootPath, ["rev-parse", "--show-toplevel"], 4_096);
+    const topLevel = await runGit(this.rootPath, ["rev-parse", "--show-toplevel"], 4_096, this.gitDir);
     if (topLevel.exitCode !== 0 || resolve(topLevel.stdout.trim()) !== this.rootPath) {
       throw new RepositoryToolException(
         "NOT_A_GIT_REPOSITORY",
