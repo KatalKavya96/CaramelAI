@@ -18,5 +18,7 @@ declare const CardNav: ComponentType<{
   cardEffect?: "rise" | "unfold" | "fade";
   cardHeight?: number;
   maxWidth?: number;
+  reducedMotion?: boolean;
+  onLinkClick?: (link: CardNavItem["links"][number], item: CardNavItem, event: import("react").MouseEvent) => void;
 }>;
 export default CardNav;

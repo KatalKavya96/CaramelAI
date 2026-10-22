@@ -67,3 +67,21 @@ button:disabled { cursor: default; }
   --feature-light: rgba(130,140,153,.16);
 }
 body { background-image:none; }
+
+:root, :root[data-theme="light"] { --overlay-surface:rgba(253,252,250,.96); }
+:root[data-theme="dark"] { --overlay-surface:rgba(29,34,41,.97); }
+a, button, summary { touch-action:manipulation; }
+button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible { outline:2px solid var(--focus); outline-offset:4px; }
+[data-transparency="reduced"] { --site-glass:var(--surface-solid); --site-window:var(--surface-solid); --site-sidebar:var(--surface-solid); --overlay-surface:var(--surface-raised); }
+[data-transparency="reduced"] *,[data-transparency="reduced"] *::before,[data-transparency="reduced"] *::after { backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
+[data-transparency="reduced"] .card-nav__panel { background:var(--surface-solid); }
+:root[data-contrast="more"][data-theme="light"] { --text:#111; --text-muted:#424242; --text-subtle:#424242; --placeholder:#454545; --border:#a29b94; --border-strong:#736c65; --site-edge:#b3aba4; --site-accent-text:#6b4328; }
+:root[data-contrast="more"][data-theme="dark"] { --text:#fff; --text-muted:#d1d5dc; --text-subtle:#d1d5dc; --placeholder:#d1d5dc; --border:#78818e; --border-strong:#aeb6c0; --site-edge:#78818e; --site-accent-text:#e4e7eb; }
+[data-contrast="more"] .card-nav { --cn-muted:var(--text-muted) !important; --cn-edge:var(--border) !important; }
+@media(prefers-reduced-transparency:reduce){:root{--site-glass:var(--surface-solid);--site-window:var(--surface-solid);--overlay-surface:var(--surface-raised)}*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.card-nav__panel{background:var(--surface-solid)}}
+@media(prefers-contrast:more){:root{--text-muted:var(--text);--border:var(--border-strong)}.card-nav{--cn-muted:var(--text)!important}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+[data-motion="reduced"] { scroll-behavior:auto; }
+[data-motion="reduced"] *,[data-motion="reduced"] *::before,[data-motion="reduced"] *::after { scroll-behavior:auto!important; animation:none!important; transition:none!important; }
+/* Clip full-bleed hero atmospheres without creating a horizontal scroll container. */
+html { overflow-x:clip; }

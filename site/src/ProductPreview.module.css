@@ -85,3 +85,13 @@
 @media (max-width: 1000px) { .layout { grid-template-columns: 155px minmax(0,1fr); } .sidebar { padding: 16px 9px; } .timeline { padding: 22px 15px 15px; } .review { padding: 17px 13px 15px; } .taskHeader { padding: 21px 18px 16px; } .workColumns { grid-template-columns: .85fr 1.15fr; } .timeline li { gap: 10px; } .logo { gap: 5px; } .logo strong { font-size: 17px; } }
 @media (max-width: 760px) { .layout { grid-template-columns: 125px minmax(0,1fr); } .workColumns { grid-template-columns: 1fr; } .timeline { display: none; } .taskHeader h2 { font-size: 15px; } .taskHeader { align-items: flex-start; } .status { font-size: 7px; padding: 4px; } .logo strong { font-size: 15px; } .logo svg:first-child { width: 22px; } .logo svg:last-child { display: none; } .newTask { padding: 6px; } .newTask kbd { display: none; } .sidebar { font-size: 9px; } .recent, .selectedTask { font-size: 8px; } .tabPanel { min-height: 250px; } .review { padding: 18px; } .layout { min-height: auto; } .codeLines { font-size: 9px; } .checkList > div { flex-wrap: wrap; } }
 @media (max-width: 440px) { .layout { grid-template-columns: 1fr; } .sidebar { display: none; } .titlebar > span:not(.example) { display: none; } .lights, .example { width: auto; } .taskHeader { padding: 17px 14px 13px; } .review { padding: 15px 13px; } .tabs { gap: 23px; } .figure figcaption { font-size: 8px; line-height: 1.8; } .figure figcaption a { display: block; } .window { border-radius: 13px; } }
+.demoToolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:17px; }
+.demoToolbar > span { font-size:12px; color:var(--text-muted); }
+.scenarioPicker { display:flex; padding:4px; gap:3px; border:1px solid var(--border); border-radius:99px; background:var(--site-glass); backdrop-filter:blur(16px); }
+.scenarioPicker button { border:0; border-radius:99px; padding:8px 14px; background:transparent; color:var(--text-muted); font-size:11px; transition:background 180ms,color 180ms,box-shadow 180ms; }
+.scenarioPicker button[aria-pressed="true"] { background:var(--surface-raised); color:var(--text); box-shadow:var(--shadow-sm); }
+.scenarioPicker button:hover { color:var(--text); }
+.taskPrompt { font-size:10px; line-height:1.7; color:var(--text-muted); margin:0 0 22px; }
+.panelTransition { animation:preview-enter 180ms ease-out both; }
+@keyframes preview-enter { from { opacity:.25; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:600px){.demoToolbar{justify-content:center}.demoToolbar > span{display:none}.scenarioPicker{width:100%;justify-content:center}.scenarioPicker button{flex:1;padding:10px 8px}}
