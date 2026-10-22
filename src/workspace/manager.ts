@@ -129,13 +129,15 @@ interface GitLocation {
 // Defence in depth: even trusted config must not run hooks or an fsmonitor command.
 const HARDENED_GIT_CONFIG = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"] as const;
 
+const SNAPSHOT_COPY_CONCURRENCY = 16;
+
 async function runGit(
   cwd: string,
   args: readonly string[],
   input?: string,
   location?: GitLocation,
 ): Promise<GitResult> {
-  const process = Bun.spawn(["git", ...(location === undefined ? [] : HARDENED_GIT_CONFIG), ...args], {
+  const process = Bun.spawn(["git", ...HARDENED_GIT_CONFIG, ...args], {
     cwd,
     stdin: input === undefined ? "ignore" : "pipe",
     stdout: "pipe",
@@ -183,28 +185,60 @@ async function sourceRevision(sourcePath: string): Promise<string | null> {
  * Submodule paths (gitlinks, mode 160000). Their contents belong to another repository, so the
  * snapshot keeps the pinned commit from the checkout and does not copy their working tree.
  */
-async function submodulePaths(sourcePath: string): Promise<Set<string>> {
-  const output = await requireGit(sourcePath, ["ls-files", "--stage", "-z"]);
-  const paths = new Set<string>();
-  for (const entry of output.split("\0")) {
-    const tab = entry.indexOf("\t");
-    if (tab !== -1 && entry.startsWith("160000 ")) paths.add(entry.slice(tab + 1));
-  }
-  return paths;
+interface IndexEntries {
+  submodules: Set<string>;
+  symlinks: string[];
 }
 
-async function repositoryFiles(sourcePath: string): Promise<string[]> {
-  const output = await requireGit(sourcePath, [
-    "ls-files",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-    "-z",
-  ]);
-  const submodules = await submodulePaths(sourcePath);
-  return [...new Set(output.split("\0").filter(Boolean))]
-    .filter((path) => !submodules.has(path))
-    .sort();
+async function indexEntries(sourcePath: string): Promise<IndexEntries> {
+  const output = await requireGit(sourcePath, ["ls-files", "--stage", "-z"]);
+  const submodules = new Set<string>();
+  const symlinks: string[] = [];
+  for (const entry of output.split("\0")) {
+    const tab = entry.indexOf("\t");
+    if (tab === -1) continue;
+    if (entry.startsWith("160000 ")) submodules.add(entry.slice(tab + 1));
+    else if (entry.startsWith("120000 ")) symlinks.push(entry.slice(tab + 1));
+  }
+  return { submodules, symlinks };
+}
+
+function nulList(output: string): string[] {
+  return output.split("\0").filter(Boolean);
+}
+
+/**
+ * Paths whose working-tree content differs from what `git checkout <revision>` produces:
+ * staged and unstaged edits, deletions, and untracked files that are not ignored. With no
+ * revision (an unborn branch) every tracked and untracked file must be copied.
+ */
+async function pathsToOverlay(sourcePath: string, revision: string | null, submodules: Set<string>): Promise<string[]> {
+  const untracked = nulList(await requireGit(sourcePath, ["ls-files", "--others", "--exclude-standard", "-z"]));
+  const differing = revision === null
+    ? nulList(await requireGit(sourcePath, ["ls-files", "--cached", "-z"]))
+    : nulList(await requireGit(sourcePath, ["diff", "--name-only", "--no-renames", "-z", revision, "--"]));
+  return [...new Set([...differing, ...untracked])].filter((path) => !submodules.has(path)).sort();
+}
+
+async function mapWithConcurrency<T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next]!;
+      next += 1;
+      await task(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+function assertInternalSymlink(sourceRoot: string, path: string, link: string): void {
+  if (isAbsolute(link) || !isInside(sourceRoot, resolve(dirname(resolve(sourceRoot, path)), link))) {
+    throw new WorkspaceException(
+      "UNSUPPORTED_ENTRY",
+      `External or absolute symlink is not supported in the input snapshot: ${path}`,
+    );
+  }
 }
 
 async function copyRepositoryEntry(sourceRoot: string, targetRoot: string, path: string): Promise<void> {
@@ -218,8 +252,10 @@ async function copyRepositoryEntry(sourceRoot: string, targetRoot: string, path:
   try {
     sourceStat = await lstat(source);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      await rm(target, { recursive: true, force: true });
+    // ENOTDIR: a parent became a file (a directory replaced by a file), so this path is gone too.
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+      // The target may already be shadowed by the replacing file; only clean up below a directory.
+      await rm(target, { recursive: true, force: true }).catch(() => {});
       return;
     }
     throw error;
@@ -234,12 +270,7 @@ async function copyRepositoryEntry(sourceRoot: string, targetRoot: string, path:
   }
   if (sourceStat.isSymbolicLink()) {
     const link = await readlink(source);
-    if (isAbsolute(link) || !isInside(sourceRoot, resolve(dirname(source), link))) {
-      throw new WorkspaceException(
-        "UNSUPPORTED_ENTRY",
-        `External or absolute symlink is not supported in the input snapshot: ${path}`,
-      );
-    }
+    assertInternalSymlink(sourceRoot, path, link);
     await symlink(link, target);
     return;
   }
@@ -352,8 +383,16 @@ export class IsolatedWorkspace {
       if (originalRevision !== null) {
         await requireGit(temporaryWorkspace, ["checkout", "--quiet", "--detach", originalRevision], undefined, location);
       }
-      for (const path of await repositoryFiles(sourcePath)) {
-        await copyRepositoryEntry(sourcePath, temporaryWorkspace, path);
+      // Checkout already produced HEAD; copy only what differs in the source working tree.
+      const index = await indexEntries(sourcePath);
+      const overlay = await pathsToOverlay(sourcePath, originalRevision, index.submodules);
+      await mapWithConcurrency(overlay, SNAPSHOT_COPY_CONCURRENCY, (path) =>
+        copyRepositoryEntry(sourcePath, temporaryWorkspace, path),
+      );
+      // Unchanged symlinks came from checkout, so they get the same escape check as copied ones.
+      const overlaid = new Set(overlay);
+      for (const path of index.symlinks.filter((link) => !overlaid.has(link))) {
+        assertInternalSymlink(sourcePath, path, await readlink(resolve(temporaryWorkspace, path)));
       }
 
       await mkdir(resolve(temporaryGitDir, "info"), { recursive: true });

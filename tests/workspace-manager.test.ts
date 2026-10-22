@@ -104,6 +104,49 @@ describe("IsolatedWorkspace initialization", () => {
   });
 });
 
+describe("IsolatedWorkspace snapshot overlay", () => {
+  const commit = (root: string, message: string) =>
+    git(root, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", message]);
+
+  test("reproduces staged, unstaged, deleted, untracked and dir-to-file changes exactly", async () => {
+    const source = await sourceRepository();
+    await mkdir(join(source, "dir"));
+    await writeFile(join(source, "dir", "inner.txt"), "inner\n");
+    await writeFile(join(source, "staged.txt"), "v1\n");
+    git(source, ["add", "."]);
+    commit(source, "more");
+
+    await writeFile(join(source, "staged.txt"), "v2 staged\n");
+    git(source, ["add", "staged.txt"]);
+    await writeFile(join(source, "a.txt"), "unstaged edit\n");
+    await rm(join(source, "delete.txt"));
+    await writeFile(join(source, "new.txt"), "untracked\n");
+    await rm(join(source, "dir"), { recursive: true });
+    await writeFile(join(source, "dir"), "now a file\n");
+
+    const workspace = await createWorkspace(source);
+    const read = (path: string) => readFile(join(workspace.workspacePath, path), "utf8");
+    expect(await read("staged.txt")).toBe("v2 staged\n");
+    expect(await read("a.txt")).toBe("unstaged edit\n");
+    expect(existsSync(join(workspace.workspacePath, "delete.txt"))).toBeFalse();
+    expect(await read("new.txt")).toBe("untracked\n");
+    expect(await read("dir")).toBe("now a file\n");
+  });
+
+  test("rejects a committed external symlink even though it is not copied", async () => {
+    const source = await sourceRepository();
+    const outside = await temporaryDirectory("dinner-link-target-");
+    await writeFile(join(outside, "secret.txt"), "secret");
+    await symlink(join(outside, "secret.txt"), join(source, "external-link"));
+    git(source, ["add", "external-link"]);
+    commit(source, "link");
+
+    const parent = await temporaryDirectory("dinner-run-parent-");
+    const result = await IsolatedWorkspace.create({ sourcePath: source, runRoot: join(parent, "run") });
+    expect(result).toMatchObject({ ok: false, error: { code: "UNSUPPORTED_ENTRY" } });
+  });
+});
+
 describe("IsolatedWorkspace patching", () => {
   test("applies a patch only to the isolated copy", async () => {
     const source = await sourceRepository();
