@@ -5,10 +5,10 @@ interface Props { theme: "light" | "dark"; reducedMotion: boolean; className?: s
 // A small, smoothly upscaled field keeps the mesh independent of screen pixel density.
 const WIDTH = 144;
 const HEIGHT = 96;
-const STRENGTHS = [.65,.85,.45];
+const STRENGTHS = [1.1,1,.65];
 const PALETTES = {
-  light: { base: [238,233,226], shades: [[180,144,110], [255,255,253], [220,207,189]] },
-  dark: { base: [48,55,64], shades: [[92,105,121], [19,24,31], [114,119,128]] },
+  light: { base: [238,233,226], shades: [[173,135,98], [255,255,253], [210,193,170]] },
+  dark: { base: [48,55,64], shades: [[118,126,139], [8,13,19], [103,111,122]] },
 } as const;
 
 export function AmbientGradient({ theme, reducedMotion, className }: Props) {
@@ -29,7 +29,7 @@ export function AmbientGradient({ theme, reducedMotion, className }: Props) {
 
     const draw = (time: number) => {
       // Unequal frequencies bend the field continuously without straight travel or a short loop.
-      const phase = time * .12;
+      const phase = time * .2;
       const centers: [number,number][] = [
         [.12 + Math.sin(phase * .79) * .18, .2 + Math.cos(phase * 1.13) * .18],
         [.74 + Math.sin(phase * .61 + 2) * .2, .32 + Math.cos(phase * .83 + 1) * .24],
@@ -63,7 +63,8 @@ export function AmbientGradient({ theme, reducedMotion, className }: Props) {
     };
     const animate = (now: number) => {
       if (now - lastFrame >= 1000 / 24) {
-        elapsed += Math.min((now - lastFrame) / 1000, .1);
+        // Resume resets lastFrame, so throttled frames can safely use real elapsed time.
+        elapsed += (now - lastFrame) / 1000;
         lastFrame = now;
         draw(elapsed);
       }
