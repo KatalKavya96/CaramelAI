@@ -3,9 +3,17 @@
 .brand { --mark: var(--accent); display: inline-flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-family: var(--font-brand); font-size: 23px; font-weight: 700; letter-spacing: -.8px; flex-shrink: 0; }
 .main { max-width: 1280px; padding: 0 64px; margin: auto; }
 .hero { position: relative; isolation: isolate; text-align: center; padding-top: 138px; }
-.hero::before { content: ''; pointer-events: none; position: absolute; width: 100vw; left: 50%; transform: translateX(-50%); top: 0; height: min(1150px,100%); z-index: -2; background: radial-gradient(ellipse at 12% 6%, var(--hero-cloud-a), transparent 49%),radial-gradient(ellipse at 85% 0%,var(--hero-cloud-b),transparent 50%),radial-gradient(ellipse at 38% 37%,var(--hero-cloud-c),transparent 60%),linear-gradient(180deg,var(--hero-top),var(--bg) 90%); background-size: 145% 125%,150% 135%,140% 130%,100% 100%; background-position: 0% 0%,100% 0%,30% 15%,0 0; background-repeat: no-repeat; animation: atmosphereDrift 24s ease-in-out infinite alternate; }
-@keyframes atmosphereDrift {
-  to { background-position: 100% 35%,0% 45%,85% 0%,0 0; }
+.hero::before { content: ''; pointer-events: none; position: absolute; width: 100vw; left: 50%; transform: translateX(-50%); top: 0; height: min(1150px,100%); z-index: -3; background: linear-gradient(180deg,var(--hero-top),var(--bg) 90%); }
+.bubbles { --bubble-a: rgba(183,137,94,.26); --bubble-b: rgba(215,185,150,.34); --bubble-c: rgba(255,255,255,.85); position: absolute; inset: 0 auto auto 50%; width: 100vw; height: min(1150px,100%); transform: translateX(-50%); overflow: hidden; pointer-events: none; z-index: -2; mask-image: linear-gradient(#000 65%,transparent); }
+:global([data-theme="dark"]) .bubbles { --bubble-a: rgba(111,128,150,.32); --bubble-b: rgba(76,92,115,.38); --bubble-c: rgba(156,164,174,.18); }
+.bubbles > span { position: absolute; width: clamp(260px,42vw,650px); aspect-ratio: 1; border-radius: 50%; filter: blur(48px); background: radial-gradient(circle at 40% 40%,var(--bubble-a),transparent 72%); animation: bubbleFloat 18s ease-in-out infinite; will-change: transform; }
+.bubbles > span:nth-child(1) { left: -10%; top: 5%; animation-delay: -5s; }
+.bubbles > span:nth-child(2) { right: -8%; top: 12%; background: radial-gradient(circle,var(--bubble-b),transparent 72%); animation-duration: 23s; animation-delay: -12s; animation-direction: reverse; }
+.bubbles > span:nth-child(3) { left: 28%; top: 32%; width: clamp(220px,34vw,520px); background: radial-gradient(circle,var(--bubble-c),transparent 72%); animation-duration: 20s; animation-delay: -8s; }
+@keyframes bubbleFloat {
+  0%,100% { transform: translate3d(0,0,0) scale(1); }
+  33% { transform: translate3d(18vw,90px,0) scale(1.15); }
+  66% { transform: translate3d(-8vw,-65px,0) scale(.9); }
 }
 .hero::after { content: ''; pointer-events:none; position:absolute; width:100vw; left:50%; transform:translateX(-50%); top:0; height:720px; z-index:-1; opacity:.16; mix-blend-mode:soft-light; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.45' filter='url(%23n)'/%3E%3C/svg%3E"); }
 .appIcon { display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 46px; border-radius: 21px; background: var(--site-glass); border: 1px solid var(--site-edge); box-shadow: 0 10px 25px rgba(0,0,0,.09),inset 0 1px 0 var(--site-edge); backdrop-filter:blur(18px); }

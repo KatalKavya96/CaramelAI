@@ -71,6 +71,7 @@ export function Landing() {
     <LandingOverlays overlay={overlay} setOverlay={setOverlay} theme={theme} toggleTheme={toggle} appearance={appearance} toggleAppearance={toggleAppearance} />
     <main id="main" className={styles.main}>
       <section id="top" className={styles.hero} aria-labelledby="hero-title">
+        <div className={styles.bubbles} aria-hidden="true"><span /><span /><span /></div>
         <div className={styles.appIcon}><LogoMark size={49} /></div>
         <h1 id="hero-title">Build anything with Caramel.</h1>
         <p className={styles.lead}>From issue to reviewed patch. Your repo, your model, your checks.</p>
