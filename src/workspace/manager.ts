@@ -52,6 +52,29 @@ function sha256(value: string | Uint8Array): string {
 
 const MAX_REPLACE_FILE_BYTES = 512 * 1024;
 
+/**
+ * Untracked paths that tools generate while installing, building, or testing. They are written
+ * to the workspace's own `info/exclude`, so they never count as an edit, never invalidate
+ * verification evidence, and never reach `patch.diff`. Files the input already tracks still count.
+ */
+const GENERATED_ARTIFACT_PATTERNS = [
+  "__pycache__/",
+  "*.py[cod]",
+  ".pytest_cache/",
+  ".mypy_cache/",
+  ".ruff_cache/",
+  ".tox/",
+  ".nox/",
+  ".venv/",
+  "*.egg-info/",
+  ".coverage",
+  "node_modules/",
+  ".next/",
+  ".turbo/",
+  ".cache/",
+  ".DS_Store",
+];
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -316,6 +339,8 @@ export class IsolatedWorkspace {
         await copyRepositoryEntry(sourcePath, temporaryWorkspace, path);
       }
 
+      await mkdir(resolve(temporaryGitDir, "info"), { recursive: true });
+      await writeFile(resolve(temporaryGitDir, "info", "exclude"), `${GENERATED_ARTIFACT_PATTERNS.join("\n")}\n`);
       await requireGit(temporaryWorkspace, ["config", "user.name", "Dinner Harness"], undefined, location);
       await requireGit(temporaryWorkspace, ["config", "user.email", "harness@example.invalid"], undefined, location);
       await requireGit(temporaryWorkspace, ["add", "-A", "--", "."], undefined, location);
