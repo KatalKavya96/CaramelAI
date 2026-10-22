@@ -152,6 +152,59 @@ describe("RunService", () => {
   });
 });
 
+describe("RunService follow-up runs", () => {
+  test("a follow-up starts from the parent's result and records only its own changes", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const seenByChild: string[] = [];
+    const service = await openService({
+      createModel: (request) => request.task === "make it beta"
+        ? new FakeModelAdapter([
+            turn({ type: "replace_file", path: "a.txt", content: "beta\n" }),
+            ...[1, 2, 3].map(() => turn({ type: "finish", summary: "Changed alpha to beta." })),
+          ])
+        : {
+            async complete(modelRequest) {
+              seenByChild.push(modelRequest.messages.map((message) => message.content).join("\n"));
+              const step = seenByChild.length;
+              if (step === 1) return turn({ type: "read_file", path: "a.txt" });
+              if (step === 2) return turn({ type: "replace_file", path: "b.txt", content: "new\n" });
+              return turn({ type: "finish", summary: "Added b." });
+            },
+          },
+    });
+    const parent = await service.start("kavya", { task: "make it beta", provider: "openrouter", repo: { kind: "local", path: await sourceRepo() } });
+    await waitFor(() => service.get("kavya", parent.id).status === "partial");
+    expect(service.get("kavya", parent.id).summary).toBe("Changed alpha to beta.");
+
+    await expect(service.start("someone-else", { parentRunId: parent.id, task: "x" })).rejects.toBeInstanceOf(RunNotFoundError);
+    const child = await service.start("kavya", { parentRunId: parent.id, task: "now add b.txt" });
+    await waitFor(() => service.get("kavya", child.id).status === "partial");
+
+    expect(service.get("kavya", parent.id).childRunIds).toEqual([child.id]);
+    const finished = service.get("kavya", child.id);
+    expect(finished.parentRunId).toBe(parent.id);
+    expect(finished.changedFiles).toEqual(["b.txt"]);
+    expect(seenByChild[0]).toContain("Changed alpha to beta.");
+    expect(seenByChild[0]).toContain("now add b.txt");
+    expect(seenByChild.join("\n")).toContain("beta");
+
+    const events: AgentEvent[] = [];
+    await service.subscribe("kavya", child.id, 0, (event) => events.push(event));
+    const started = events.find((event) => event.type === "run_started");
+    expect(started?.type === "run_started" && started.payload.parentRunId).toBe(parent.id);
+    const childPatch = await readFile(join(service["options"].runsRoot, child.id, "output", "patch.diff"), "utf8");
+    expect(childPatch).toContain("b.txt");
+    expect(childPatch).not.toContain("a.txt");
+  });
+
+  test("refuses a follow-up of a run that has not finished", async () => {
+    const { runTask } = gatedRunTask();
+    const service = await openService({ runTask, maxActiveRunsPerUser: 2, prepareRepository: async () => "/unused" });
+    const parent = await service.start("a", { task: "t", provider: "openrouter", repo: { kind: "local", path: "/unused" } });
+    await expect(service.start("a", { parentRunId: parent.id, task: "more" })).rejects.toThrow("has not finished");
+  });
+});
+
 describe("prepareRepository", () => {
   test("uses a local path as is and reports a failed clone with its URL", async () => {
     const { prepareRepository } = await import("../src/service");

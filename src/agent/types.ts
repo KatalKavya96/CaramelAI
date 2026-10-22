@@ -36,6 +36,8 @@ export interface AgentEventPayloads {
     sourceRepo: string;
     workspacePath: string;
     budgets: { maxSteps: number; maxMinutes: number; maxModelCalls: number };
+    /** Set when this run continues an earlier run's result. */
+    parentRunId?: string;
   };
   model_decision: ModelDecision;
   model_error: { kind: ModelErrorKind; message: string; attempts: number };
