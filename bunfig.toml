@@ -1,0 +1,3 @@
+# Root `bun test` runs the core tests only. web/ and site/ use vitest (npm test in each folder).
+[test]
+root = "tests"
