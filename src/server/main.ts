@@ -75,3 +75,16 @@ const server = Bun.serve({
   fetch: app,
 });
 console.log(`Caramel server listening on http://${server.hostname}:${server.port} (public origin ${publicOrigin})`);
+
+// On SIGTERM/SIGINT (a deploy or Ctrl+C), stop accepting requests, cancel runs so their
+// containers are removed, and record their final state before exiting.
+let stopping = false;
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    if (stopping) process.exit(130);
+    stopping = true;
+    console.log(`${signal}: cancelling active runs…`);
+    void server.stop(true);
+    void service.close().finally(() => process.exit(0));
+  });
+}

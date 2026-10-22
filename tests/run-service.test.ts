@@ -14,7 +14,10 @@ import {
 } from "../src/service";
 
 const cleanup: string[] = [];
+const services: RunService[] = [];
 afterEach(async () => {
+  // Settle runs before deleting their folders, or a late run.json write races the cleanup.
+  await Promise.all(services.splice(0).map((service) => service.close()));
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
@@ -38,7 +41,7 @@ const turn = (action: ModelTurn["decision"]["action"]): ModelTurn => ({ decision
 const LOCAL_POLICY = { ...SHARED_SERVER_POLICY, allowLocalRepos: true };
 
 async function openService(overrides: Partial<RunServiceOptions> = {}): Promise<RunService> {
-  return await RunService.open({
+  const service = await RunService.open({
     runsRoot: join(await temporaryDirectory("caramel-runs-"), "runs"),
     policy: LOCAL_POLICY,
     maxConcurrentRuns: 2,
@@ -49,6 +52,8 @@ async function openService(overrides: Partial<RunServiceOptions> = {}): Promise<
     createModel: () => new FakeModelAdapter([turn({ type: "list_files" }), ...[1, 2, 3].map(() => turn({ type: "finish", summary: "nothing to do" }))]),
     ...overrides,
   });
+  services.push(service);
+  return service;
 }
 
 async function waitFor(check: () => boolean): Promise<void> {
@@ -59,8 +64,12 @@ async function waitFor(check: () => boolean): Promise<void> {
 /** A runTask stub that finishes only when the test says so. */
 function gatedRunTask() {
   const gates: Array<() => void> = [];
-  const runTask = (async () => {
-    await new Promise<void>((release) => gates.push(release));
+  const runTask = (async (_options: unknown, dependencies: { signal?: AbortSignal }) => {
+    // Like a real run, it also ends when cancelled.
+    await new Promise<void>((release) => {
+      gates.push(release);
+      dependencies.signal?.addEventListener("abort", () => release(), { once: true });
+    });
     return { status: "partial", terminationReason: "stub", changedFiles: [] } as unknown as AgentRunResult;
   }) as unknown as typeof runAutonomousTask;
   return { runTask, gates };
