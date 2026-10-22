@@ -1,0 +1,69 @@
+@import "@web/tokens/base.css";
+
+/* Landing-only overrides. The application and its shared tokens are untouched. */
+:root,
+:root[data-theme="light"] {
+  --site-max: 1160px;
+  --site-gutter: clamp(20px, 4vw, 40px);
+  --bg: #f8f7f5;
+  --bg-cloud-a: rgba(255,255,255,.9);
+  --bg-cloud-b: rgba(224,215,204,.24);
+  --bg-cloud-c: rgba(255,255,255,.65);
+  --site-accent: #94633f;
+  --site-accent-on: #fff;
+  --site-accent-text: #856345;
+  --site-nav: rgba(250,249,247,.76);
+  --site-glass: rgba(255,255,255,.61);
+  --site-sidebar: rgba(244,241,237,.65);
+  --site-window: rgba(253,252,251,.76);
+  --site-edge: rgba(255,255,255,.95);
+  --site-shadow: 0 24px 60px -22px rgba(92,66,42,.23), 0 3px 12px rgba(92,66,42,.04);
+  --site-code: #faf9f7;
+  --site-code-ink: #5a6381;
+}
+:root[data-theme="dark"] {
+  --bg: #111418;
+  --bg-cloud-a: rgba(75,85,96,.12);
+  --bg-cloud-b: rgba(54,62,73,.18);
+  --bg-cloud-c: rgba(65,73,84,.08);
+  --site-accent: #e8e9eb;
+  --site-accent-on: #202329;
+  --site-accent-text: #aeb4bc;
+  --site-nav: rgba(31,36,43,.7);
+  --site-glass: rgba(47,54,63,.42);
+  --site-sidebar: rgba(43,49,57,.55);
+  --site-window: rgba(25,30,36,.77);
+  --site-edge: rgba(255,255,255,.13);
+  --site-shadow: 0 30px 80px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.025);
+  --site-code: rgba(17,22,28,.58);
+  --site-code-ink: #a6b6cf;
+}
+html { scroll-behavior: smooth; scroll-padding-top: 100px; }
+body { background-attachment: fixed; background-size: 100% 1200px; background-repeat: no-repeat; }
+#root { height: auto; min-height: 100%; }
+button, a, select, summary { -webkit-tap-highlight-color: transparent; }
+button, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Codex-like atmospheric hero, expressed in Caramel's restrained palettes. */
+:root, :root[data-theme="light"] {
+  --hero-top: #eee9e2;
+  --hero-cloud-a: rgba(255,255,255,.95);
+  --hero-cloud-b: rgba(174,147,119,.22);
+  --hero-cloud-c: rgba(216,202,185,.3);
+  --feature-a: #dfd8d0;
+  --feature-b: #eeeae4;
+  --feature-light: rgba(255,255,255,.8);
+}
+:root[data-theme="dark"] {
+  --hero-top: #303740;
+  --hero-cloud-a: rgba(146,156,166,.15);
+  --hero-cloud-b: rgba(72,81,94,.45);
+  --hero-cloud-c: rgba(26,30,37,.3);
+  --feature-a: #363d47;
+  --feature-b: #222830;
+  --feature-light: rgba(130,140,153,.16);
+}
+body { background-image:none; }
