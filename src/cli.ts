@@ -60,6 +60,7 @@ Options:
   --reasoning-effort <level> DeepSeek reasoning effort: low, medium, high (default: medium)
   --plan <enabled|disabled>  Enable Plan mode: agent proposes plan with questions first (default: disabled)
   --verify <command>         The only command accepted as verification (default: checks discovered from manifests)
+  --network <bridge|none>    Network for repository commands; none blocks downloads and exfiltration (default: bridge)
   --help                     Show this help
 `;
 
@@ -187,6 +188,7 @@ export async function runCli(
       maxContextChars: config.budgets.maxContextChars,
       repositoryMapEnabled: config.repositoryMapEnabled,
       ...(config.verificationCommands === undefined ? {} : { verificationCommands: config.verificationCommands }),
+      commandNetwork: config.commandNetwork,
     };
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
 

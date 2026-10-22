@@ -166,7 +166,7 @@ make runner-image
 make test-docker
 ```
 
-Each target command receives one unprivileged, read-only-root container with CPU, memory, process, time, preview, and log limits. Only the target workspace is mounted read-write. The container has network access, but model credentials are never injected. Docker reduces host exposure; it is not claimed as a complete security boundary.
+Each target command receives one unprivileged, read-only-root container with CPU, memory, process, time, preview, and log limits. Only the target workspace is mounted read-write. The container has network access by default so dependencies can install; pass `--network none` to block all network access, including exfiltration by a prompt-injected model. Model credentials are never injected, and the workspace git metadata lives outside the mount, so container commands cannot change what host git executes. Docker reduces host exposure; it is not claimed as a complete security boundary.
 
 Rehearse the committed tree from a fresh archive:
 

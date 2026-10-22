@@ -37,7 +37,7 @@ Provide bounded file listing, text search, ranged reads, atomic patch applicatio
 
 ### Command runner
 
-Execute target commands in a fresh unprivileged Linux container with time, output, and resource limits. Mount only the isolated working copy and dedicated log paths. Permit network access under the current product decision. Do not inject model credentials or mount the host Docker socket.
+Execute target commands in a fresh unprivileged Linux container with time, output, and resource limits. Mount only the isolated working copy and dedicated log paths. Permit network access by default, with `--network none` to disable it. Keep git metadata outside the mount. Do not inject model credentials or mount the host Docker socket.
 
 ### Verification and evidence
 
