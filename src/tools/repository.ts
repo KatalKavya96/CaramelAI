@@ -34,7 +34,11 @@ const DEFAULT_LIMITS: Required<RepositoryToolLimits> = {
   maxSearchFileBytes: 1024 * 1024,
 };
 
-const EXCLUDED_DIRECTORIES = new Set([
+// Never shown: git metadata and harness output, even when nothing ignores them.
+const ALWAYS_EXCLUDED = new Set([".git", ".harness-runs"]);
+
+// Fallback for directories that are not git worktrees, where .gitignore cannot be asked.
+const HEURISTIC_EXCLUDED_DIRECTORIES = new Set([
   ".git",
   ".harness-runs",
   ".next",
@@ -47,6 +51,9 @@ const EXCLUDED_DIRECTORIES = new Set([
   "target",
   "vendor",
 ]);
+
+const IGNORED_LISTING_BYTES = 1024 * 1024;
+const SEARCH_CONCURRENCY = 16;
 
 const MANIFEST_CANDIDATES = [
   "package.json",
@@ -248,6 +255,7 @@ export class RepositoryTools {
       );
       const entries: FileListEntry[] = [];
       let truncated = false;
+      const skip = await this.exclusionFilter();
 
       const visit = async (absolutePath: string, displayPath: string, depth: number): Promise<void> => {
         if (entries.length >= this.limits.maxListEntries) {
@@ -275,8 +283,8 @@ export class RepositoryTools {
         const children = await readdir(absolutePath, { withFileTypes: true });
         children.sort((left, right) => left.name.localeCompare(right.name));
         for (const child of children) {
-          if (EXCLUDED_DIRECTORIES.has(child.name)) continue;
           const childDisplay = displayPath === "." ? child.name : `${displayPath}/${child.name}`;
+          if (skip(child.name, childDisplay)) continue;
           await visit(resolve(absolutePath, child.name), childDisplay, depth + 1);
           if (entries.length >= this.limits.maxListEntries) {
             truncated = true;
@@ -388,19 +396,37 @@ export class RepositoryTools {
       let filesSkippedAsLarge = 0;
       let resultLimitReached = false;
 
-      for (const file of files.slice(0, this.limits.maxSearchFiles)) {
-        const fileStat = await stat(file.absolutePath);
-        if (fileStat.size > this.limits.maxSearchFileBytes) {
+      // Reads run SEARCH_CONCURRENCY at a time, but results are consumed in path order so
+      // output stays deterministic and the result limit cuts at the same place every run.
+      const candidates = files.slice(0, this.limits.maxSearchFiles);
+      const load = async (file: ResolvedRepositoryPath): Promise<string | "large" | "binary"> => {
+        if ((await stat(file.absolutePath)).size > this.limits.maxSearchFileBytes) return "large";
+        if (await isBinaryFile(file.absolutePath)) return "binary";
+        return await Bun.file(file.absolutePath).text();
+      };
+      // Reads still in flight when the result limit stops the loop must not become unhandled rejections.
+      const startLoad = (file: ResolvedRepositoryPath) => {
+        const loading = load(file);
+        loading.catch(() => {});
+        return loading;
+      };
+      let pending = candidates.slice(0, SEARCH_CONCURRENCY).map(startLoad);
+      for (let position = 0; position < candidates.length; position += 1) {
+        const file = candidates[position]!;
+        const loaded = await pending[0]!;
+        pending = pending.slice(1);
+        const next = candidates[position + SEARCH_CONCURRENCY];
+        if (next !== undefined) pending.push(startLoad(next));
+        if (loaded === "large") {
           filesSkippedAsLarge += 1;
           continue;
         }
-        if (await isBinaryFile(file.absolutePath)) {
+        if (loaded === "binary") {
           filesSkippedAsBinary += 1;
           continue;
         }
         filesScanned += 1;
-        const text = await Bun.file(file.absolutePath).text();
-        const lines = text.split(/\r?\n/);
+        const lines = loaded.split(/\r?\n/);
         for (let index = 0; index < lines.length; index += 1) {
           const line = lines[index] ?? "";
           const column = line.indexOf(options.query);
@@ -555,14 +581,15 @@ export class RepositoryTools {
     }
 
     const files: ResolvedRepositoryPath[] = [];
+    const skip = await this.exclusionFilter();
     const visit = async (directory: string, displayPath: string): Promise<void> => {
       const children = await readdir(directory, { withFileTypes: true });
       children.sort((left, right) => left.name.localeCompare(right.name));
       for (const child of children) {
         if (files.length >= limit) return;
-        if (EXCLUDED_DIRECTORIES.has(child.name)) continue;
         if (child.isSymbolicLink()) continue;
         const childDisplay = displayPath === "." ? child.name : `${displayPath}/${child.name}`;
+        if (skip(child.name, childDisplay)) continue;
         const childAbsolute = resolve(directory, child.name);
         if (child.isDirectory()) await visit(childAbsolute, childDisplay);
         else if (child.isFile()) files.push({ absolutePath: childAbsolute, displayPath: childDisplay });
@@ -570,6 +597,35 @@ export class RepositoryTools {
     };
     await visit(start.absolutePath, start.displayPath);
     return files;
+  }
+
+  /**
+   * Decides which paths listing and search skip. In a git worktree: whatever git ignores
+   * (.gitignore, info/exclude), plus well-known generated directories only while they are
+   * untracked. So tracked `vendor/` or `build/` sources stay visible, while an unignored
+   * `node_modules/` stays hidden. Outside git it falls back to the fixed directory list.
+   */
+  private async exclusionFilter(): Promise<(name: string, displayPath: string) => boolean> {
+    const listing = (extra: string[]) =>
+      runGit(this.rootPath, ["ls-files", "-z", "--others", "--directory", ...extra], IGNORED_LISTING_BYTES, this.gitDir)
+        .catch(() => null);
+    const [ignored, untracked] = await Promise.all([
+      listing(["--ignored", "--exclude-standard"]),
+      listing(["--exclude-standard"]),
+    ]);
+    const usable = (result: CapturedProcess | null): result is CapturedProcess =>
+      result !== null && result.exitCode === 0 && !result.truncated;
+    if (!usable(ignored) || !usable(untracked)) {
+      return (name) => ALWAYS_EXCLUDED.has(name) || HEURISTIC_EXCLUDED_DIRECTORIES.has(name);
+    }
+    const paths = (result: CapturedProcess) =>
+      new Set(result.stdout.split("\0").filter(Boolean).map((path) => path.replace(/\/$/, "")));
+    const ignoredPaths = paths(ignored);
+    const untrackedPaths = paths(untracked);
+    return (name, displayPath) =>
+      ALWAYS_EXCLUDED.has(name) ||
+      ignoredPaths.has(displayPath) ||
+      (HEURISTIC_EXCLUDED_DIRECTORIES.has(name) && untrackedPaths.has(displayPath));
   }
 
   private async assertGitRepository(): Promise<void> {
