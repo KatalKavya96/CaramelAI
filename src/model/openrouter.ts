@@ -1,48 +1,14 @@
 import { OpenRouter } from "@openrouter/sdk";
 import { ModelTransportError, StructuredModelAdapter, type ModelTransport } from "./adapter";
+import { modelDecisionJsonSchema } from "./schema";
 import type { ModelAdapter, ModelRequest } from "./types";
 
 export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.2";
 
-const objectAction = (properties: Record<string, unknown>, required: string[]) => ({
-  type: "object",
-  properties,
-  required,
-  additionalProperties: false,
-});
-
-const optionalPath = { path: { type: "string" } };
-const positiveInteger = { type: "integer", minimum: 1 };
-
-export const MODEL_DECISION_SCHEMA = {
-  type: "object",
-  properties: {
-    intent: { type: "string" },
-    action: {
-      oneOf: [
-        objectAction({ type: { const: "list_files" }, ...optionalPath, maxDepth: positiveInteger }, ["type"]),
-        objectAction({ type: { const: "search" }, query: { type: "string" }, ...optionalPath, maxResults: positiveInteger }, ["type", "query"]),
-        objectAction({ type: { const: "read_file" }, path: { type: "string" }, startLine: positiveInteger, endLine: positiveInteger }, ["type", "path"]),
-        objectAction({ type: { const: "apply_patch" }, patch: { type: "string" } }, ["type", "patch"]),
-        objectAction({ type: { const: "replace_text" }, path: { type: "string" }, search: { type: "string" }, replacement: { type: "string" } }, ["type", "path", "search", "replacement"]),
-        objectAction({ type: { const: "replace_file" }, path: { type: "string" }, content: { type: "string" } }, ["type", "path", "content"]),
-        objectAction({ type: { const: "create_checkpoint" }, label: { type: "string" } }, ["type", "label"]),
-        objectAction({ type: { const: "restore_checkpoint" }, checkpointId: { type: "string" } }, ["type", "checkpointId"]),
-        objectAction({
-          type: { const: "run_command" },
-          command: { type: "string" },
-          purpose: { type: "string", enum: ["setup", "agent", "verification"] },
-          cwd: { type: "string" },
-          timeoutMs: positiveInteger,
-        }, ["type", "command"]),
-        objectAction({ type: { const: "inspect_diff" } }, ["type"]),
-        objectAction({ type: { const: "finish" }, summary: { type: "string" } }, ["type", "summary"]),
-      ],
-    },
-  },
-  required: ["action"],
-  additionalProperties: false,
-} as const;
+// Generated from the zod schema the parser uses, so the contract sent to the provider cannot drift.
+// Strict structured output (OpenAI-style) requires every property to be required and rejects oneOf;
+// this schema has optional fields, so it is sent non-strict and the parser stays the real gate.
+export const MODEL_DECISION_SCHEMA = modelDecisionJsonSchema();
 
 interface OpenRouterChatClient {
   chat: {
@@ -87,7 +53,7 @@ export class OpenRouterTransport implements ModelTransport {
             jsonSchema: {
               name: "dinner_model_decision",
               description: "Exactly one validated coding-harness action.",
-              strict: true,
+              strict: false,
               schema: MODEL_DECISION_SCHEMA,
             },
           },

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createOpenRouterModel } from "../src/model";
+import { createOpenRouterModel, MODEL_DECISION_SCHEMA } from "../src/model";
 
 describe("OpenRouter model transport", () => {
-  test("sends strict structured output and maps content and usage", async () => {
+  test("sends the generated decision schema as structured output and maps content and usage", async () => {
     let request: any;
     let options: any;
     const model = createOpenRouterModel({
@@ -32,8 +32,9 @@ describe("OpenRouter model transport", () => {
       model: "openai/test-model",
       stream: false,
       temperature: 0,
-      responseFormat: { type: "json_schema", jsonSchema: { name: "dinner_model_decision", strict: true } },
+      responseFormat: { type: "json_schema", jsonSchema: { name: "dinner_model_decision", strict: false } },
     });
+    expect(request.chatRequest.responseFormat.jsonSchema.schema).toEqual(MODEL_DECISION_SCHEMA);
     expect(options.retries).toEqual({ strategy: "none" });
     expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.stringify(request)).not.toContain("not-forwarded");
