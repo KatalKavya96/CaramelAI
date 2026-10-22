@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runAutonomousTask, type CommandExecutor } from "../src/agent";
@@ -377,6 +377,32 @@ describe("autonomous agent vertical slice", () => {
 
     expect(result.status).toBe("verified");
     expect(result.changedFiles).toEqual(["src/math.ts"]);
+  });
+
+  test("still writes result artifacts when the workspace breaks mid-run", async () => {
+    const source = await codingFixture();
+    const parent = await temporaryDirectory("dinner-agent-output-");
+    const breakingExecutor = (workspacePath: string): CommandExecutor => ({
+      run: async (request) => {
+        await rename(join(workspacePath, "..", "git"), join(workspacePath, "..", "git-broken"));
+        throw new Error(`simulated runner crash for ${request.command}`);
+      },
+    });
+    const result = await runAutonomousTask(
+      { repoPath: source, outputPath: join(parent, "run"), task: "Fix add.", maxSteps: 10, maxMinutes: 2, maxModelCalls: 10 },
+      {
+        model: new FakeModelAdapter([
+          turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+          turn({ type: "finish", summary: "unreachable" }),
+        ]),
+        runId: "test-run",
+        createCommandExecutor: async (workspacePath) => breakingExecutor(workspacePath),
+      },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(await Bun.file(result.resultPath).exists()).toBeTrue();
+    expect(await Bun.file(result.reportPath).exists()).toBeTrue();
   });
 
   test("invalidates successful verification after a later edit", async () => {

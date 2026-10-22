@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { CommandResult } from "../execution";
 import { finalStateVerified } from "../verification";
-import { currentState } from "./action-dispatcher";
+import { UNAVAILABLE_FINGERPRINT } from "./action-dispatcher";
 import type { InitializedRunContext } from "./run-init";
 import { renderEvidenceReport } from "./report";
 import type { AgentRunResult, AgentStatus } from "./types";
@@ -69,7 +69,14 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
     ? exported.value
     : { patchPath: resolve(workspace.runRoot, "patch.diff"), changedFiles: [] };
 
-  const finalState = await currentState(workspace);
+  const inspected = await workspace.inspectChanges();
+  const finalState = inspected.ok
+    ? inspected.value
+    : { patchSha256: UNAVAILABLE_FINGERPRINT, changedFiles: [], bytes: 0 };
+  if (!inspected.ok && status !== "failed") {
+    status = "failed";
+    terminationReason = `Final workspace state is unreadable: ${inspected.error.message}`;
+  }
   const successfulFinalState =
     finalState.changedFiles.length > 0 &&
     finalStateVerified(context.verificationEvidence, finalState.patchSha256) &&
