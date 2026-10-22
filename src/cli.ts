@@ -62,6 +62,7 @@ Options:
   --plan <enabled|disabled>  Enable Plan mode: agent proposes plan with questions first (default: disabled)
   --verify <command>         The only command accepted as verification (default: checks discovered from manifests)
   --network <bridge|none>    Network for repository commands; none blocks downloads and exfiltration (default: bridge)
+  --sandbox <auto|native|docker>  Where commands run: the OS sandbox (macOS Seatbelt, Linux bubblewrap) or Docker (default: auto)
   --help                     Show this help
 `;
 
@@ -190,6 +191,7 @@ export async function runCli(
       repositoryMapEnabled: config.repositoryMapEnabled,
       ...(config.verificationCommands === undefined ? {} : { verificationCommands: config.verificationCommands }),
       commandNetwork: config.commandNetwork,
+      sandbox: config.sandbox,
     };
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
 

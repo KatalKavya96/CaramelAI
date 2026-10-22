@@ -344,6 +344,9 @@ export class RunService {
           maxMinutes: record.request.budgets.maxMinutes,
           maxModelCalls: record.request.budgets.maxModelCalls,
           commandNetwork: this.options.policy.commandNetwork,
+          sandbox: this.options.policy.sandbox,
+          // Commands must never see other runs or the server's key store.
+          sandboxDenyRead: [this.options.runsRoot],
           // Passed so the event log redacts it wherever it might appear.
           apiKey: live.apiKey,
           ...(record.request.verificationCommands === undefined ? {} : { verificationCommands: record.request.verificationCommands }),
