@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { ModelTransportError, StructuredModelAdapter, type ModelTransport } from "./adapter";
+import { ModelTransportError, retryAfterMs, StructuredModelAdapter, type ModelTransport } from "./adapter";
 import type { ModelAdapter, ModelRequest } from "./types";
 
 export const DEFAULT_QWEN_MODEL = "qwen-plus";
@@ -24,7 +24,7 @@ function transportError(error: unknown): ModelTransportError {
   const status = statusCode(error);
   const message = error instanceof Error ? error.message : "Qwen request failed.";
   if (status === 401 || status === 403) return new ModelTransportError("authentication", message, { cause: error });
-  if (status === 429) return new ModelTransportError("rate_limit", message, { cause: error });
+  if (status === 429) return new ModelTransportError("rate_limit", message, { cause: error, retryAfterMs: retryAfterMs(error) });
   if (status !== undefined && status >= 400 && status < 500) return new ModelTransportError("permanent", message, { cause: error });
   return new ModelTransportError("transient", message, { cause: error });
 }

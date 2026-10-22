@@ -13,19 +13,24 @@ function stableOutcome(result: unknown): unknown {
   return result;
 }
 
-export class ProgressTracker {
-  private previousSignature: string | null = null;
-  private repetitions = 0;
+/** How many recent observations a repeat is looked for in. Long enough to catch A,B,A,B cycles. */
+export const STAGNATION_WINDOW = 6;
 
+/**
+ * Detects an action that reproduces an outcome already seen recently. The workspace fingerprint
+ * is content-addressed, so an edit that is reverted and re-applied lands on the same signature:
+ * oscillation (A,B,A,B) is caught, not only immediate repetition (A,A).
+ */
+export class ProgressTracker {
+  private readonly recent: string[] = [];
+
+  /** Returns how many times this signature occurs in the window, including this observation. */
   observe(action: ModelAction, result: unknown, workspaceFingerprint: string): number {
     const signature = new Bun.CryptoHasher("sha256")
       .update(JSON.stringify({ action, result: stableOutcome(result), workspaceFingerprint }))
       .digest("hex");
-    if (signature === this.previousSignature) this.repetitions += 1;
-    else {
-      this.previousSignature = signature;
-      this.repetitions = 1;
-    }
-    return this.repetitions;
+    this.recent.push(signature);
+    if (this.recent.length > STAGNATION_WINDOW) this.recent.shift();
+    return this.recent.filter((seen) => seen === signature).length;
   }
 }
