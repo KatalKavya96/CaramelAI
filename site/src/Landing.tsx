@@ -11,6 +11,7 @@ import { Navbar } from "./navigation/Navbar";
 import { LandingOverlays, type Overlay } from "./experience/LandingOverlays";
 import { useAppearance } from "./experience/useAppearance";
 import { Updates, WhatsNewPill, useUpdates } from "./experience/Updates";
+import { AmbientGradient } from "./experience/AmbientGradient";
 import styles from "./Landing.module.css";
 
 function Brand() {
@@ -71,7 +72,7 @@ export function Landing() {
     <LandingOverlays overlay={overlay} setOverlay={setOverlay} theme={theme} toggleTheme={toggle} appearance={appearance} toggleAppearance={toggleAppearance} />
     <main id="main" className={styles.main}>
       <section id="top" className={styles.hero} aria-labelledby="hero-title">
-        <div className={styles.bubbles} aria-hidden="true"><span /><span /><span /></div>
+        <AmbientGradient theme={theme} reducedMotion={appearance.motion} className={styles.ambient} />
         <div className={styles.appIcon}><LogoMark size={49} /></div>
         <h1 id="hero-title">Build anything with Caramel.</h1>
         <p className={styles.lead}>From issue to reviewed patch. Your repo, your model, your checks.</p>
