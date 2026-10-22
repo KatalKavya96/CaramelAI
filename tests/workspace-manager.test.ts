@@ -64,7 +64,7 @@ describe("IsolatedWorkspace initialization", () => {
 
     expect(await readFile(join(workspace.workspacePath, "a.txt"), "utf8")).toBe("input dirty state\n");
     expect(await readFile(join(workspace.workspacePath, "notes.txt"), "utf8")).toBe("untracked input\n");
-    expect(git(workspace.workspacePath, ["status", "--porcelain=v1"])).toBe("");
+    expect(git(workspace.workspacePath, [`--git-dir=${workspace.gitDir}`, "--work-tree=.", "status", "--porcelain=v1"])).toBe("");
     expect(git(source, ["status", "--porcelain=v1"])).toBe(sourceStatusBefore);
     expect(workspace.sourceRevision).not.toBe(workspace.baselineRevision);
   });
@@ -275,7 +275,7 @@ describe("IsolatedWorkspace checkpoints and export", () => {
     expect(await readFile(exported.value.patchPath, "utf8")).not.toContain("-alpha");
 
     const verification = join(await temporaryDirectory("dinner-verify-parent-"), "repo");
-    git(workspace.workspacePath, ["clone", "--quiet", workspace.workspacePath, verification]);
+    git(workspace.workspacePath, ["clone", "--quiet", workspace.gitDir, verification]);
     git(verification, ["checkout", "--quiet", "--detach", workspace.baselineRevision]);
     const exportedPatch = await readFile(exported.value.patchPath, "utf8");
     git(verification, ["apply", "--check", "-"], exportedPatch);
@@ -294,6 +294,48 @@ describe("IsolatedWorkspace checkpoints and export", () => {
     expect(await workspace.restoreCheckpoint(checkpoint.value)).toMatchObject({
       ok: false,
       error: { code: "CHECKPOINT_INVALID" },
+    });
+  });
+});
+
+describe("IsolatedWorkspace git boundary", () => {
+  test("never runs git configuration planted inside the workspace", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+    const marker = join(await temporaryDirectory("dinner-marker-"), "host-command-ran");
+    const plantedConfigPath = join(workspace.workspacePath, ".git", "config");
+    await mkdir(join(workspace.workspacePath, ".git"), { recursive: true });
+    const existingConfig = existsSync(plantedConfigPath) ? await readFile(plantedConfigPath, "utf8") : "";
+    await writeFile(plantedConfigPath, `${existingConfig}[core]\n\tfsmonitor = "touch ${marker}; false"\n`);
+
+    expect((await workspace.inspectChanges()).ok).toBeTrue();
+    expect((await workspace.exportPatch()).ok).toBeTrue();
+    expect(existsSync(marker)).toBeFalse();
+  });
+
+  test("keeps git metadata outside the workspace and out of the patch", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+    expect(existsSync(join(workspace.workspacePath, ".git"))).toBeFalse();
+    await mkdir(join(workspace.workspacePath, ".git"), { recursive: true });
+    await writeFile(join(workspace.workspacePath, ".git", "planted"), "x\n");
+    const state = await workspace.inspectChanges();
+    if (!state.ok) throw new Error(state.error.message);
+    expect(state.value.changedFiles).toEqual([]);
+  });
+
+  test("rejects edits to git metadata paths", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+    for (const path of [".git/config", ".GIT/config", "nested/.git/hooks/pre-commit", ".Git"]) {
+      expect(await workspace.replaceFile(path, "[core]\n")).toMatchObject({
+        ok: false,
+        error: { code: "REPLACEMENT_REJECTED" },
+      });
+    }
+    expect(await workspace.replaceText(".git/config", "[core]", "[x]")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
     });
   });
 });

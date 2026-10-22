@@ -27,6 +27,7 @@ export interface WorkspaceSnapshot {
   sourcePath: string;
   sourceRevision: string | null;
   workspacePath: string;
+  gitDir: string;
   runRoot: string;
   baselineRevision: string;
 }
