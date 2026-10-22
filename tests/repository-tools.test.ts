@@ -82,6 +82,54 @@ describe("RepositoryTools paths and listing", () => {
   });
 });
 
+describe("RepositoryTools respects git ignore rules", () => {
+  test("hides gitignored output but shows tracked vendor and build sources", async () => {
+    const root = await gitRepository();
+    await writeFile(join(root, ".gitignore"), "generated/\n*.log\n");
+    await mkdir(join(root, "vendor"));
+    await writeFile(join(root, "vendor", "lib.go"), "package lib // tokenNeedle\n");
+    await mkdir(join(root, "build"));
+    await writeFile(join(root, "build", "release.sh"), "echo tokenNeedle\n");
+    git(root, ["add", "."]);
+    git(root, ["-c", "user.name=T", "-c", "user.email=t@example.invalid", "commit", "-qm", "vendor"]);
+    await mkdir(join(root, "generated"));
+    await writeFile(join(root, "generated", "out.ts"), "tokenNeedle");
+    await writeFile(join(root, "debug.log"), "tokenNeedle");
+    await writeFile(join(root, "src", "new.ts"), "export const tokenNeedle = 1;\n");
+    const tools = await RepositoryTools.create(root);
+
+    const listing = await tools.listFiles();
+    const listed = listing.ok ? listing.value.entries.map((entry) => entry.path) : [];
+    expect(listed).toContain("vendor/lib.go");
+    expect(listed).toContain("build/release.sh");
+    expect(listed).toContain("src/new.ts");
+    expect(listed).not.toContain("generated");
+    expect(listed).not.toContain("debug.log");
+
+    const search = await tools.search({ query: "tokenNeedle" });
+    expect(search.ok && search.value.matches.map((match) => match.path)).toEqual([
+      "build/release.sh",
+      "src/new.ts",
+      "vendor/lib.go",
+    ]);
+  });
+
+  test("keeps search order deterministic across concurrent reads", async () => {
+    const root = await gitRepository();
+    for (let index = 0; index < 40; index += 1) {
+      await writeFile(join(root, "src", `f${String(index).padStart(2, "0")}.ts`), "needle\n");
+    }
+    const tools = await RepositoryTools.create(root);
+    const result = await tools.search({ query: "needle", maxResults: 25 });
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+    expect(result.value.matches.map((match) => match.path)).toEqual(
+      Array.from({ length: 25 }, (_, index) => `src/f${String(index).padStart(2, "0")}.ts`),
+    );
+    expect(result.value.truncated).toBeTrue();
+  });
+});
+
 describe("RepositoryTools text inspection", () => {
   test("reads bounded line ranges and exposes truncation", async () => {
     const root = await gitRepository();
