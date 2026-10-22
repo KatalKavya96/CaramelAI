@@ -79,3 +79,16 @@ it.each(["light","dark"] as const)("visibly changes the %s field within six seco
   }
   expect(difference / (current.length * .75)).toBeGreaterThan(.5);
 });
+
+it("keeps real-time movement when the browser throttles animation frames", () => {
+  render(<AmbientGradient theme="dark" reducedMotion={false} className="mesh" />);
+  const initial = new Uint8ClampedArray(putImageData.mock.calls[0]![0].data);
+  const callback = requestFrame.mock.calls.at(-1)![0];
+  act(() => callback(performance.now() + 6000));
+  const current = putImageData.mock.calls.at(-1)![0].data as Uint8ClampedArray;
+  let difference = 0;
+  for (let i = 0; i < current.length; i++) {
+    if (i % 4 !== 3) difference += Math.abs(current[i]! - initial[i]!);
+  }
+  expect(difference / (current.length * .75)).toBeGreaterThan(3);
+});
