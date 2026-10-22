@@ -12,7 +12,7 @@ import {
   type AutonomousRunOptions,
 } from "./policy";
 import { initializeRunContext } from "./run-init";
-import { evaluateFinishDecision, finalizeRun } from "./run-finalizer";
+import { evaluateFinishDecision, finalizeRun, MAX_FINISH_REJECTIONS, missingFinishRequirements } from "./run-finalizer";
 import type {
   AgentEvent,
   AgentRunResult,
@@ -47,6 +47,7 @@ export async function runAutonomousTask(
   let unchangedExplorationSteps = 0;
   let consecutiveInvalidResponses = 0;
   let verificationReserveActivations = 0;
+  let finishRejections = 0;
   let reserveActive = false;
   let verificationCommands = 0;
   let lastVerification: CommandResult | null = null;
@@ -121,6 +122,21 @@ export async function runAutonomousTask(
           verifiedPatchSha,
           diffReviewedPatchSha,
         );
+        const missing = missingFinishRequirements({
+          changedFiles: lastState.changedFiles.length,
+          fingerprint: lastState.fingerprint,
+          verifiedPatchSha,
+          diffReviewedPatchSha,
+          trustedCommands: ctx.trustedChecks.map((check) => check.command),
+        });
+        // A gate that only says "no" wastes the run; while there is budget, say what is missing.
+        if (finishOutcome.status !== "verified" && missing.length > 0 && finishRejections < MAX_FINISH_REJECTIONS) {
+          finishRejections += 1;
+          const rejection = { ok: false, error: `Finish rejected: ${missing.join(" ")}` };
+          await events.write("tool_result", { action: "finish", workspaceChanged: false, result: rejection });
+          memory.recordObservation(decision.action, rejection);
+          continue;
+        }
         status = finishOutcome.status;
         terminationReason = finishOutcome.terminationReason;
         break;

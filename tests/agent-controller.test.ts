@@ -43,6 +43,11 @@ async function codingFixture(): Promise<string> {
   return root;
 }
 
+// An incomplete finish is sent back MAX_FINISH_REJECTIONS times before it is accepted as partial.
+function finishUntilAccepted(summary: string): ModelTurn[] {
+  return [1, 2, 3].map(() => turn({ type: "finish", summary }));
+}
+
 function turn(action: ModelTurn["decision"]["action"], intent?: string): ModelTurn {
   return {
     decision: { action, ...(intent === undefined ? {} : { intent }) },
@@ -302,7 +307,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "apply_patch", patch: wrongFix }, "wrong fix"),
         turn({ type: "inspect_diff" }),
         turn({ type: "run_command", command: "true", purpose: "verification" }),
-        turn({ type: "finish", summary: "Verified." }),
+        ...finishUntilAccepted("Verified."),
       ],
     });
 
@@ -319,7 +324,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "replace_text", path: "package.json", search: '"test":"bun test"', replacement: '"test":"exit 0"' }),
         turn({ type: "inspect_diff" }),
         turn({ type: "run_command", command: "bun run test", purpose: "verification" }),
-        turn({ type: "finish", summary: "Verified." }),
+        ...finishUntilAccepted("Verified."),
       ],
     });
 
@@ -405,6 +410,42 @@ describe("autonomous agent vertical slice", () => {
     expect(await Bun.file(result.reportPath).exists()).toBeTrue();
   });
 
+  test("sends an early finish back with what is missing, then accepts the corrected finish", async () => {
+    const source = await codingFixture();
+    const { result, model } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "finish", summary: "Done." }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "finish", summary: "Reviewed and verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    const feedback = model.requests[2]?.messages.at(-1)?.content ?? "";
+    expect(feedback).toContain("Finish rejected");
+    expect(feedback).toContain("inspect_diff");
+    expect(feedback).toContain("bun test");
+  });
+
+  test("accepts an unverified finish as partial after repeated rejections", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "finish", summary: "Done." }),
+        turn({ type: "finish", summary: "Done." }),
+        turn({ type: "finish", summary: "Still done." }),
+      ],
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.summary).toBe("Still done.");
+  });
+
   test("invalidates successful verification after a later edit", async () => {
     const source = await codingFixture();
     const secondPatch = FIX_PATCH.replace("-  return a - b;", "-  return a + b;").replace(
@@ -417,7 +458,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "apply_patch", patch: FIX_PATCH }),
         turn({ type: "run_command", command: "bun test", purpose: "verification" }),
         turn({ type: "apply_patch", patch: secondPatch }),
-        turn({ type: "finish", summary: "Claimed success after another edit." }),
+        ...finishUntilAccepted("Claimed success after another edit."),
       ],
     });
 
@@ -434,7 +475,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "run_command", command: "bun test", purpose: "verification" }),
         turn({ type: "run_command", command: "exit 9", purpose: "verification" }),
         turn({ type: "inspect_diff" }),
-        turn({ type: "finish", summary: "The latest check failed." }),
+        ...finishUntilAccepted("The latest check failed."),
       ],
     });
 
@@ -454,7 +495,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "apply_patch", patch: FIX_PATCH }),
         turn({ type: "run_command", command: "echo '0 tests'", purpose: "verification" }),
         turn({ type: "inspect_diff" }),
-        turn({ type: "finish", summary: "No tests actually ran." }),
+        ...finishUntilAccepted("No tests actually ran."),
       ],
     });
     expect(result.status).toBe("partial");
@@ -521,7 +562,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "read_file", path: "src/math.ts" }),
         turn({ type: "apply_patch", patch: FIX_PATCH }),
         turn({ type: "read_file", path: "src/math.ts" }),
-        turn({ type: "finish", summary: "Cache behavior inspected." }),
+        ...finishUntilAccepted("Cache behavior inspected."),
       ],
     });
     expect(result.memory).toMatchObject({ readCacheHits: 1, readCacheMisses: 2 });
