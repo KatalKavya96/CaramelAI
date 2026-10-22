@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { FakeModelAdapter, type ModelTurn } from "../src/model";
 import { createApp } from "../src/server/app";
-import { GitHubAuth } from "../src/server/auth";
+import { GitHubAuth, SqliteSessionStore } from "../src/server/auth";
 import { KeyStore, RunService, SHARED_SERVER_POLICY } from "../src/service";
 
 const ORIGIN = "https://caramel.test";
@@ -206,5 +206,24 @@ describe("GitHub login", () => {
     expect(session).not.toContain("gho_secret");
     const sessionCookie = session.split(";")[0]!;
     expect(await auth.userId(new Request(`${ORIGIN}/api/runs`, { headers: { cookie: sessionCookie } }))).toBe("github:42");
+  });
+
+  test("SQLite sessions survive a restart, expire, and store only a hash of the token", async () => {
+    const dir = await temporaryDirectory("caramel-sessions-");
+    const path = join(dir, "sessions.db");
+    let now = 1_000;
+    const first = new SqliteSessionStore(path, () => now);
+    first.set("token-123", { userId: "github:1", login: "kavya", expiresAt: 5_000 });
+    first.set("token-old", { userId: "github:2", login: "old", expiresAt: 2_000 });
+    first.close();
+    expect(await Bun.file(path).text()).not.toContain("token-123");
+
+    now = 3_000;
+    const reopened = new SqliteSessionStore(path, () => now);
+    expect(reopened.get("token-123")).toEqual({ userId: "github:1", login: "kavya", expiresAt: 5_000 });
+    expect(reopened.get("token-old")).toBeNull();
+    reopened.delete("token-123");
+    expect(reopened.get("token-123")).toBeNull();
+    reopened.close();
   });
 });
