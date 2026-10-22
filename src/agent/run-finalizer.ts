@@ -72,15 +72,15 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
   const inspected = await workspace.inspectChanges();
   const finalState = inspected.ok
     ? inspected.value
-    : { patchSha256: UNAVAILABLE_FINGERPRINT, changedFiles: [], bytes: 0 };
+    : { fingerprint: UNAVAILABLE_FINGERPRINT, changedFiles: [] };
   if (!inspected.ok && status !== "failed") {
     status = "failed";
     terminationReason = `Final workspace state is unreadable: ${inspected.error.message}`;
   }
   const successfulFinalState =
     finalState.changedFiles.length > 0 &&
-    finalStateVerified(context.verificationEvidence, finalState.patchSha256) &&
-    options.diffReviewedPatchSha === finalState.patchSha256;
+    finalStateVerified(context.verificationEvidence, finalState.fingerprint) &&
+    options.diffReviewedPatchSha === finalState.fingerprint;
 
   const resultPath = resolve(workspace.runRoot, "result.json");
   const reportPath = resolve(workspace.runRoot, "report.md");
@@ -101,7 +101,7 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
     verification: {
       commandsRun: options.verificationCommands,
       successfulFinalState,
-      diffReviewedForFinalState: options.diffReviewedPatchSha === finalState.patchSha256,
+      diffReviewedForFinalState: options.diffReviewedPatchSha === finalState.fingerprint,
       discoveredChecks: context.discoveredChecks,
       evidence: context.verificationEvidence,
       lastResult: options.lastVerification,
@@ -132,7 +132,7 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
     successfulFinalState,
   });
 
-  await writeFile(reportPath, renderEvidenceReport(result, finalState.patchSha256));
+  await writeFile(reportPath, renderEvidenceReport(result, finalState.fingerprint));
   await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`);
 
   return result;

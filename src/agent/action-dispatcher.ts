@@ -11,6 +11,8 @@ export interface ToolObservation {
   verification?: CommandResult;
   failure?: { kind: FailureKind; detail: string };
   workspaceChanged: boolean;
+  /** Workspace state after the action; valid until the next action runs. */
+  state: WorkspaceState;
 }
 
 export interface DispatchActionOptions {
@@ -22,6 +24,8 @@ export interface DispatchActionOptions {
   readCache: RepositoryReadCache;
   memory: TaskMemory;
   remainingTimeMs: number;
+  /** Workspace state before the action, carried over from the previous step. */
+  before: WorkspaceState;
 }
 
 export async function currentState(workspace: IsolatedWorkspace): Promise<WorkspaceState> {
@@ -32,18 +36,13 @@ export async function currentState(workspace: IsolatedWorkspace): Promise<Worksp
 
 export const UNAVAILABLE_FINGERPRINT = "unavailable";
 
-/** For error paths: a failure while recording a failure must not replace the original error. */
-export async function safeFingerprint(workspace: IsolatedWorkspace): Promise<string> {
-  const state = await workspace.inspectChanges();
-  return state.ok ? state.value.patchSha256 : UNAVAILABLE_FINGERPRINT;
-}
 
 async function executeFileSystemAction(
   action: Extract<ModelAction, { type: "list_files" | "search" | "read_file" | "inspect_diff" }>,
   repository: RepositoryTools,
   readCache: RepositoryReadCache,
   memory: TaskMemory,
-  patchSha256: string,
+  fingerprint: string,
 ): Promise<unknown> {
   switch (action.type) {
     case "list_files":
@@ -58,7 +57,7 @@ async function executeFileSystemAction(
         ...(action.maxResults === undefined ? {} : { maxResults: action.maxResults }),
       });
     case "read_file": {
-      const cached = readCache.get(action.path, action.startLine, action.endLine, patchSha256);
+      const cached = readCache.get(action.path, action.startLine, action.endLine, fingerprint);
       if (cached !== undefined) {
         memory.recordReadCache(true);
         return cached;
@@ -69,7 +68,7 @@ async function executeFileSystemAction(
         ...(action.startLine === undefined ? {} : { startLine: action.startLine }),
         ...(action.endLine === undefined ? {} : { endLine: action.endLine }),
       });
-      readCache.set(action.path, action.startLine, action.endLine, patchSha256, readResult);
+      readCache.set(action.path, action.startLine, action.endLine, fingerprint, readResult);
       return readResult;
     }
     case "inspect_diff":
@@ -159,8 +158,7 @@ async function executeCommandAction(
 }
 
 export async function dispatchAction(options: DispatchActionOptions): Promise<ToolObservation> {
-  const { action, repository, workspace, commandExecutor, checkpoints, readCache, memory, remainingTimeMs } = options;
-  const before = await currentState(workspace);
+  const { action, repository, workspace, commandExecutor, checkpoints, readCache, memory, remainingTimeMs, before } = options;
   let outcome: { result: unknown; verification?: CommandResult; failure?: ToolObservation["failure"] };
 
   if (
@@ -169,7 +167,7 @@ export async function dispatchAction(options: DispatchActionOptions): Promise<To
     action.type === "read_file" ||
     action.type === "inspect_diff"
   ) {
-    const result = await executeFileSystemAction(action, repository, readCache, memory, before.patchSha256);
+    const result = await executeFileSystemAction(action, repository, readCache, memory, before.fingerprint);
     outcome = { result };
   } else if (
     action.type === "apply_patch" ||
@@ -189,7 +187,8 @@ export async function dispatchAction(options: DispatchActionOptions): Promise<To
   const after = await currentState(workspace);
   return {
     result: outcome.result,
-    workspaceChanged: before.patchSha256 !== after.patchSha256,
+    workspaceChanged: before.fingerprint !== after.fingerprint,
+    state: after,
     ...(outcome.verification === undefined ? {} : { verification: outcome.verification }),
     ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
   };

@@ -52,7 +52,10 @@ export interface PatchExport {
 }
 
 export interface WorkspaceState {
-  patchSha256: string;
+  /**
+   * Git tree hash of the staged workspace: equal fingerprints mean byte-identical content.
+   * Evidence and diff reviews are bound to it, so any later edit makes them stale.
+   */
+  fingerprint: string;
   changedFiles: string[];
-  bytes: number;
 }

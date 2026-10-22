@@ -3,9 +3,7 @@ import type { ModelAction, ModelDecision } from "../model";
 import type { TaskMemory } from "../memory";
 import type { FailureRecord } from "../recovery";
 import { createEvidence, isTrustedVerification, type DiscoveredCheck, type VerificationEvidence } from "../verification";
-import type { IsolatedWorkspace } from "../workspace";
 import type { ToolObservation } from "./action-dispatcher";
-import { currentState } from "./action-dispatcher";
 import type { AgentEventWriter } from "./events";
 import { DIRECT_IMPLEMENTATION_GUIDANCE_STEP, isExplorationAction, MAX_UNCHANGED_EXPLORATION_STEPS } from "./policy";
 import type { ProgressTracker } from "./progress";
@@ -15,7 +13,6 @@ export interface ToolObservationContext {
   action: Exclude<ModelAction, { type: "finish" }>;
   intent?: string | undefined;
   observation: ToolObservation;
-  workspace: IsolatedWorkspace;
   memory: TaskMemory;
   progress: ProgressTracker;
   events: AgentEventWriter;
@@ -53,7 +50,7 @@ export async function processToolObservation(
     lastVerification: CommandResult | null;
   },
 ): Promise<ObservationProcessResult> {
-  const { action, intent, observation, workspace, memory, progress, events, failures, verificationEvidence } = ctx;
+  const { action, intent, observation, memory, progress, events, failures, verificationEvidence } = ctx;
   let verifiedPatchSha = current.verifiedPatchSha;
   let diffReviewedPatchSha = current.diffReviewedPatchSha;
   let unchangedExplorationSteps = current.unchangedExplorationSteps;
@@ -84,7 +81,7 @@ export async function processToolObservation(
 
   if (action.type === "run_command") commandsRunIncrement += 1;
   if (action.type === "inspect_diff") {
-    diffReviewedPatchSha = (await currentState(workspace)).patchSha256;
+    diffReviewedPatchSha = observation.state.fingerprint;
   }
   if (action.type === "create_checkpoint" && observation.failure === undefined) {
     checkpointsCreatedIncrement += 1;
@@ -96,11 +93,11 @@ export async function processToolObservation(
   if (observation.verification !== undefined) {
     verificationCommandsIncrement += 1;
     lastVerification = observation.verification;
-    const state = await currentState(workspace);
+    const state = observation.state;
     const trusted = isTrustedVerification(observation.verification, ctx.trustedChecks, state.changedFiles);
     const evidence = createEvidence({
       result: observation.verification,
-      codeFingerprint: state.patchSha256,
+      codeFingerprint: state.fingerprint,
       baseline: state.changedFiles.length === 0,
       trusted,
     });
@@ -108,7 +105,7 @@ export async function processToolObservation(
     memory.recordCheck(evidence);
     if (trusted) {
       verifiedPatchSha = evidence.status === "passed" && !observation.workspaceChanged
-        ? state.patchSha256
+        ? state.fingerprint
         : null;
     } else if (evidence.status === "failed" || evidence.status === "timed_out") {
       // Trust is asymmetric: an untrusted command cannot prove success, but its failure still counts against it.
@@ -132,7 +129,7 @@ export async function processToolObservation(
   const repetition = progress.observe(
     action,
     observation.result,
-    (await currentState(workspace)).patchSha256,
+    observation.state.fingerprint,
   );
   if (repetition >= 2) {
     stagnationInterventions += 1;
@@ -160,7 +157,6 @@ export async function processToolObservation(
   }
 
   if (observation.failure !== undefined) {
-    const state = await currentState(workspace);
     const countsAgainstRepairLimit =
       observation.failure.kind === "test" || observation.failure.kind === "patch";
     if (countsAgainstRepairLimit) repairAttempts += 1;
@@ -170,7 +166,7 @@ export async function processToolObservation(
       hypothesis: intent ?? null,
       action: action.type,
       detail: observation.failure.detail,
-      codeFingerprint: state.patchSha256,
+      codeFingerprint: observation.state.fingerprint,
       countsAgainstRepairLimit,
     };
     failures.push(failure);
