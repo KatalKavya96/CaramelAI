@@ -1,7 +1,7 @@
 import { OpenRouter } from "@openrouter/sdk";
 import { ModelTransportError, StructuredModelAdapter, type ModelTransport } from "./adapter";
 import { modelDecisionJsonSchema } from "./schema";
-import type { ModelAdapter, ModelRequest } from "./types";
+import type { ModelAdapter, ModelRequest, ResponseFormat } from "./types";
 
 export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.2";
 
@@ -9,6 +9,12 @@ export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.2";
 // Strict structured output (OpenAI-style) requires every property to be required and rejects oneOf;
 // this schema has optional fields, so it is sent non-strict and the parser stays the real gate.
 export const MODEL_DECISION_SCHEMA = modelDecisionJsonSchema();
+
+const DECISION_RESPONSE_FORMAT: ResponseFormat = {
+  name: "dinner_model_decision",
+  description: "Exactly one validated coding-harness action.",
+  schema: MODEL_DECISION_SCHEMA,
+};
 
 interface OpenRouterChatClient {
   chat: {
@@ -50,12 +56,7 @@ export class OpenRouterTransport implements ModelTransport {
           messages: request.messages.map(({ role, content }) => ({ role, content })),
           responseFormat: {
             type: "json_schema",
-            jsonSchema: {
-              name: "dinner_model_decision",
-              description: "Exactly one validated coding-harness action.",
-              strict: false,
-              schema: MODEL_DECISION_SCHEMA,
-            },
+            jsonSchema: { ...(request.responseFormat ?? DECISION_RESPONSE_FORMAT), strict: false },
           },
           stream: false,
           temperature: 0,

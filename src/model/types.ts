@@ -5,8 +5,17 @@ export interface ModelMessage {
   content: string;
 }
 
+/** A JSON Schema the provider should constrain its output to, when it supports that. */
+export interface ResponseFormat {
+  name: string;
+  description: string;
+  schema: Record<string, unknown>;
+}
+
 export interface ModelRequest {
   messages: readonly ModelMessage[];
+  /** Defaults to the coding-action decision schema. */
+  responseFormat?: ResponseFormat;
 }
 
 export type ModelAction =
@@ -47,10 +56,18 @@ export interface ModelTurn {
   usage: ModelUsage;
 }
 
+/** Raw model text plus usage, for callers that validate the output themselves (plan mode). */
+export interface TextTurn {
+  output: string;
+  usage: ModelUsage;
+}
+
 export interface CompletionBudget {
   remainingTimeMs?: number;
 }
 
 export interface ModelAdapter {
   complete(request: ModelRequest, budget?: CompletionBudget): Promise<ModelTurn>;
+  /** Same timeout, retry and error handling as complete(), without decision parsing. */
+  completeText?(request: ModelRequest, budget?: CompletionBudget): Promise<TextTurn>;
 }
