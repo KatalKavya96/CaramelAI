@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { FakeModelAdapter, type ModelTurn } from "../src/model";
 import { createApp } from "../src/server/app";
 import { GitHubAuth } from "../src/server/auth";
@@ -31,7 +31,7 @@ async function sourceRepo(): Promise<string> {
 
 const turn = (action: ModelTurn["decision"]["action"]): ModelTurn => ({ decision: { action }, usage: { source: "unavailable" } });
 
-async function setup() {
+async function setup(extra: { staticDir?: string } = {}) {
   const data = await temporaryDirectory("caramel-app-");
   const runsRoot = join(data, "runs");
   const keys = await KeyStore.open({ root: join(data, "keys"), masterKey: Buffer.alloc(32, 7).toString("base64") });
@@ -56,6 +56,7 @@ async function setup() {
     auth: { userId: async (request) => users[request.headers.get("x-test-user") ?? ""] ?? null },
     testKey: async (_provider, key) => (key.endsWith("good") ? { ok: true } : { ok: false, error: "invalid_key", message: "rejected" }),
     heartbeatMs: 50,
+    ...extra,
   });
   const call = (method: string, path: string, options: { user?: string; body?: unknown; origin?: string | null; headers?: Record<string, string> } = {}) => {
     const headers: Record<string, string> = { ...(options.headers ?? {}) };
@@ -135,6 +136,12 @@ describe("HTTP API", () => {
     expect([...resumed.matchAll(/^id: (\d+)$/gm)].map((match) => Number(match[1]))).toEqual(ids.filter((id) => id > 3));
 
     expect((await call("GET", `/api/runs/${run.id}/patch`, { user: "token-a" })).status).toBe(200);
+    const resultText = await (await call("GET", `/api/runs/${run.id}/result`, { user: "token-a" })).text();
+    expect(JSON.parse(resultText)).toMatchObject({ status: "partial", verification: { successfulFinalState: false } });
+    expect(resultText).not.toContain("workspacePath");
+    expect(resultText).not.toContain("LogPath");
+    expect(resultText).not.toContain("memory");
+    expect((await call("GET", `/api/runs/${run.id}/result`, { user: "token-b" })).status).toBe(404);
     expect((await call("GET", `/api/runs/${run.id}`, { user: "token-b" })).status).toBe(404);
     expect((await call("GET", `/api/runs/${run.id}/events`, { user: "token-b" })).status).toBe(404);
     expect((await call("GET", `/api/runs/${run.id}/patch`, { user: "token-b" })).status).toBe(404);
@@ -147,6 +154,31 @@ describe("HTTP API", () => {
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({ error: "invalid_request" });
     expect((await call("POST", "/api/runs", { user: "token-a", body: "not json{" as unknown })).status).toBe(400);
+  });
+});
+
+describe("web UI files", () => {
+  test("serves built files, falls back to index.html for app routes, and never leaves the folder", async () => {
+    const dist = await temporaryDirectory("caramel-dist-");
+    await mkdir(join(dist, "assets"));
+    await writeFile(join(dist, "index.html"), "<!doctype html><div id=root></div>");
+    await writeFile(join(dist, "assets", "app-1a2b.js"), "console.log(1)");
+    const secret = join(dirname(dist), `${basename(dist)}-secret.txt`);
+    await writeFile(secret, "secret");
+    cleanup.push(secret);
+    const { call } = await setup({ staticDir: dist });
+
+    const asset = await call("GET", "/assets/app-1a2b.js");
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    expect(asset.headers.get("cache-control")).toContain("immutable");
+    const shell = await call("GET", "/runs/123");
+    expect(await shell.text()).toContain("id=root");
+    expect(shell.headers.get("cache-control")).toBe("no-cache");
+    for (const path of [`/../${basename(dist)}-secret.txt`, `/%2e%2e/${basename(dist)}-secret.txt`]) {
+      expect(await (await call("GET", path)).text()).not.toContain("secret");
+    }
+    expect((await call("GET", "/auth/whatever")).status).toBe(404);
+    expect((await call("GET", "/api/nope", { user: "token-a" })).status).toBe(404);
   });
 });
 

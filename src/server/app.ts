@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import type { AgentEvent } from "../agent";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { resolve, sep } from "node:path";
+import type { AgentEvent, AgentRunResult } from "../agent";
 import {
   isProvider,
   MissingProviderKeyError,
@@ -27,6 +27,72 @@ export interface AppOptions {
   /** Extra routes handled before the API (login, static files). Returning null falls through. */
   extraRoutes?: (request: Request) => Promise<Response | null> | Response | null;
   heartbeatMs?: number;
+  /** Built web UI (web/dist). Served for GETs outside /api and /auth, with index.html as the SPA fallback. */
+  staticDir?: string;
+}
+
+/**
+ * The part of result.json a browser may see. Host paths (workspace, logs, patch) and the
+ * model's memory are dropped; evidence keeps what the result screen shows.
+ */
+export function clientResult(result: AgentRunResult) {
+  return {
+    status: result.status,
+    summary: result.summary,
+    terminationReason: result.terminationReason,
+    changedFiles: result.changedFiles,
+    verification: {
+      commandsRun: result.verification.commandsRun,
+      successfulFinalState: result.verification.successfulFinalState,
+      diffReviewedForFinalState: result.verification.diffReviewedForFinalState,
+      evidence: result.verification.evidence.map(({ stdoutLogPath: _out, stderrLogPath: _err, ...evidence }) => evidence),
+    },
+    metrics: result.metrics,
+    usage: result.usage,
+  };
+}
+
+const STATIC_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".json": "application/json",
+};
+
+async function staticFile(root: string, pathname: string): Promise<Response | null> {
+  const canonicalRoot = await realpath(root).catch(() => null);
+  if (canonicalRoot === null) return null;
+  const serve = async (path: string, immutable: boolean): Promise<Response | null> => {
+    const canonical = await realpath(path).catch(() => null);
+    // Resolved through symlinks and checked against the root, so ../ or a link cannot escape it.
+    if (canonical === null || (canonical !== canonicalRoot && !canonical.startsWith(`${canonicalRoot}${sep}`))) return null;
+    if (!(await stat(canonical)).isFile()) return null;
+    const extension = canonical.slice(canonical.lastIndexOf("."));
+    return new Response(Bun.file(canonical), {
+      headers: {
+        "content-type": STATIC_TYPES[extension] ?? "application/octet-stream",
+        // Vite fingerprints files under assets/, so they never change; index.html always revalidates.
+        "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  };
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (decoded !== "/" && !decoded.includes("\0")) {
+    const found = await serve(resolve(canonicalRoot, `.${decoded}`), decoded.startsWith("/assets/"));
+    if (found !== null) return found;
+  }
+  // Client-side routes such as /runs/123 fall back to the app shell.
+  return await serve(resolve(canonicalRoot, "index.html"), false);
 }
 
 const json = (body: unknown, status = 200): Response =>
@@ -70,7 +136,13 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
       if (extra !== null && extra !== undefined) return extra;
 
       const url = new URL(request.url);
-      if (!url.pathname.startsWith("/api/")) return fail(404, "not_found");
+      if (!url.pathname.startsWith("/api/")) {
+        if (request.method === "GET" && options.staticDir !== undefined && !url.pathname.startsWith("/auth/")) {
+          const file = await staticFile(options.staticDir, url.pathname);
+          if (file !== null) return file;
+        }
+        return fail(404, "not_found");
+      }
       const userId = await options.auth.userId(request);
       if (userId === null) return fail(401, "unauthenticated");
       // Cookies ride along on cross-site requests; checking Origin stops another site from
@@ -94,6 +166,12 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
           return json(await options.service.cancel(userId, id));
         case "GET runs/:id/events":
           return await events(options, userId, id, request);
+        case "GET runs/:id/result": {
+          options.service.get(userId, id);
+          const text = await readFile(resolve(options.runsRoot, id, "output", "result.json"), "utf8").catch(() => null);
+          if (text === null) return fail(404, "not_ready");
+          return json(clientResult(JSON.parse(text) as AgentRunResult));
+        }
         case "GET runs/:id/patch": {
           options.service.get(userId, id);
           const patch = await readFile(resolve(options.runsRoot, id, "output", "patch.diff"), "utf8").catch(() => null);

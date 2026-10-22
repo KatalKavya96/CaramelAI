@@ -46,6 +46,7 @@ const app = createApp({
   auth,
   runsRoot,
   publicOrigin,
+  staticDir: resolve(Bun.env.CARAMEL_WEB_DIST ?? "web/dist"),
   extraRoutes: async (request) => {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/auth/github/login") return auth.login();
