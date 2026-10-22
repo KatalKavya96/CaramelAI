@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { runAutonomousTask, type CommandExecutor } from "../src/agent";
+import {
+  INITIAL_RUN_STATE,
+  reduceRunState,
+  replayRunState,
+  runAutonomousTask,
+  type AgentEvent,
+  type CommandExecutor,
+} from "../src/agent";
 import { type CommandRequest, type CommandResult } from "../src/execution";
 import { FakeModelAdapter, ModelError, type ModelTurn } from "../src/model";
 
@@ -127,6 +134,7 @@ async function runWithScript(options: {
   maxStagnationInterventions?: number;
   repositoryMapEnabled?: boolean;
   signal?: AbortSignal;
+  onEvent?: (event: AgentEvent) => void;
   createCommandExecutor?: (workspacePath: string, logsPath: string) => Promise<CommandExecutor>;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
@@ -150,6 +158,7 @@ async function runWithScript(options: {
       model,
       runId: "test-run",
       ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
       createCommandExecutor: options.createCommandExecutor ?? (async (workspacePath, logsPath) =>
         new LocalCommandExecutor(workspacePath, logsPath)),
     },
@@ -713,5 +722,44 @@ describe("autonomous agent vertical slice", () => {
     expect(result.terminationReason).toContain("cancelled");
     expect(model.requests).toHaveLength(1);
     expect(JSON.parse(await readFile(result.resultPath, "utf8")).status).toBe("cancelled");
+  });
+
+  test("marks each step before it runs, and replaying the log gives the live viewer's state", async () => {
+    const source = await codingFixture();
+    let live = INITIAL_RUN_STATE;
+    const seen: AgentEvent[] = [];
+    const { result } = await runWithScript({
+      source,
+      onEvent: (event) => {
+        seen.push(event);
+        live = reduceRunState(live, event);
+      },
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }, "inspect implementation"),
+        turn({ type: "apply_patch", patch: FIX_PATCH }, "correct addition"),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Fixed." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    expect(seen.every((event) => event.schemaVersion === 1)).toBeTrue();
+    const types = seen.map((event) => event.type);
+    const firstStart = types.indexOf("step_started");
+    expect(types[firstStart + 1]).toBe("tool_result");
+    expect(live.steps.map((step) => [step.step, step.action.type, step.outcome?.ok])).toEqual([
+      [1, "read_file", true],
+      [2, "apply_patch", true],
+      [3, "run_command", true],
+      [4, "inspect_diff", true],
+    ]);
+    expect(live.status).toBe("verified");
+    expect(live.changedFiles).toEqual(["src/math.ts"]);
+
+    const replayed = replayRunState(await readFile(result.eventsPath, "utf8"));
+    expect(replayed).toEqual(live);
+    // Re-applying events a viewer already has is a no-op, so an overlapping resume is safe.
+    expect(seen.reduce(reduceRunState, replayed)).toEqual(live);
   });
 });

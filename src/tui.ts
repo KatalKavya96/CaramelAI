@@ -406,7 +406,14 @@ export function createTuiEventRenderer(
   options: { color?: boolean } = {},
 ): (event: AgentEvent) => void {
   const color = options.color ?? true;
+  // Event sequence numbers count every event; the step number comes from step_started.
+  let currentStep: number | null = null;
   return (event) => {
+    if (event.type === "step_started") {
+      currentStep = event.payload.step;
+      return;
+    }
+
     if (event.type === "run_started") {
       const workspace = valueOf(event.payload, "workspacePath");
       write(box("Run started", [
@@ -419,7 +426,7 @@ export function createTuiEventRenderer(
     if (event.type === "model_decision") {
       const intent = valueOf(event.payload, "intent");
       const type = actionType(event.payload);
-      write(box(`Step ${event.sequence} · model`, [
+      write(box("Model · next action", [
         `${paint(color, MAGENTA, "thinking")}: ${String(intent ?? "choosing next action")}`,
         `${paint(color, GOLD, "action")}: ${type}`,
       ], { color }));
@@ -429,7 +436,7 @@ export function createTuiEventRenderer(
     if (event.type === "model_error") {
       const kind = valueOf(event.payload, "kind");
       const message = valueOf(event.payload, "message");
-      write(box(`Step ${event.sequence} · model error`, [
+      write(box("Model error", [
         `${paint(color, RED, "kind")}: ${String(kind ?? "unknown")}`,
         `${paint(color, RED, "message")}: ${String(message ?? "unknown")}`,
       ], { color }));
@@ -443,7 +450,10 @@ export function createTuiEventRenderer(
       const result = valueOf(event.payload, "result");
       const ok = typeof result === "object" && result !== null &&
         (result as Record<string, unknown>).ok !== false;
-      write(box(`Step ${event.sequence} · result`, [
+      // A tool_result with no step_started before it is an action the harness rejected unrun.
+      const title = currentStep === null ? `Rejected · ${String(action ?? "action")}` : `Step ${currentStep} · result`;
+      currentStep = null;
+      write(box(title, [
         `${workspaceChanged ? paint(color, GREEN, "changed") : paint(color, YELLOW, "unchanged")}: ${String(action ?? "unknown")}`,
         `status: ${ok ? "ok" : "blocked/rejected"}`,
         files.length > 0 ? `files: ${files.join(", ")}` : "files: none",

@@ -22,10 +22,11 @@ describe("terminal UI rendering", () => {
     const output: string[] = [];
     const render = createTuiEventRenderer((message) => output.push(message), { color: false });
     render({
+      schemaVersion: 1,
       sequence: 2,
       timestamp: new Date(0).toISOString(),
       type: "model_decision",
-      payload: { intent: "Edit members filter", action: { type: "replace_text" } },
+      payload: { intent: "Edit members filter", action: { type: "replace_text", path: "a.ts", search: "x", replacement: "y" } },
     });
 
     expect(output.join("\n")).toContain("thinking: Edit members filter");

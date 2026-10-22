@@ -27,8 +27,8 @@ describe("evidence report", () => {
   test("plain event rendering contains no ANSI sequences and includes concise intent", () => {
     const output: string[] = [];
     const render = createAgentEventRenderer((message) => output.push(message), { color: false });
-    render({ sequence: 1, timestamp: "now", type: "model_decision", payload: { intent: "inspect math", action: { type: "read_file" } } });
-    render({ sequence: 2, timestamp: "now", type: "run_finished", payload: { status: "partial" } });
+    render({ schemaVersion: 1, sequence: 1, timestamp: "now", type: "model_decision", payload: { intent: "inspect math", action: { type: "read_file", path: "src/math.ts" } } });
+    render({ schemaVersion: 1, sequence: 2, timestamp: "now", type: "run_finished", payload: { status: "partial", terminationReason: "budget", changedFiles: [], successfulFinalState: false } });
     expect(output.join("\n")).toContain("[001] ◆ MODEL → read_file");
     expect(output.join("\n")).toContain('\"intent\": \"inspect math\"');
     expect(output.join("\n")).toContain("[002] ■ RUN FINISHED: partial");
@@ -39,6 +39,7 @@ describe("evidence report", () => {
     const output: string[] = [];
     const render = createAgentEventRenderer((message) => output.push(message), { color: false });
     render({
+      schemaVersion: 1,
       sequence: 1,
       timestamp: "now",
       type: "tool_result",

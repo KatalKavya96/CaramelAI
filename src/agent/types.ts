@@ -1,5 +1,5 @@
 import type { CommandRequest, CommandResult } from "../execution";
-import type { ModelUsage } from "../model";
+import type { ModelAction, ModelDecision, ModelErrorKind, ModelUsage } from "../model";
 import type { DiscoveredCheck, VerificationEvidence } from "../verification";
 import type { RecoverySummary } from "../recovery";
 import type { TaskMemorySnapshot } from "../memory";
@@ -25,19 +25,48 @@ export interface AgentPlan {
 
 export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed" | "cancelled";
 
-export type AgentEventType =
-  | "run_started"
-  | "model_decision"
-  | "model_error"
-  | "tool_result"
-  | "run_finished";
+/** Bumped when an event payload changes shape, so readers of old events.jsonl files can tell. */
+export const AGENT_EVENT_SCHEMA_VERSION = 1;
 
-export interface AgentEvent {
-  sequence: number;
-  timestamp: string;
-  type: AgentEventType;
-  payload: unknown;
+/** The payload of every event type. This map is the contract between the run and any viewer. */
+export interface AgentEventPayloads {
+  run_started: {
+    runId: string;
+    task: string;
+    sourceRepo: string;
+    workspacePath: string;
+    budgets: { maxSteps: number; maxMinutes: number; maxModelCalls: number };
+  };
+  model_decision: ModelDecision;
+  model_error: { kind: ModelErrorKind; message: string; attempts: number };
+  /** Written before an action runs, so a viewer can show what is in progress. */
+  step_started: { step: number; action: ModelAction; intent?: string };
+  tool_result: {
+    action: ModelAction["type"];
+    workspaceChanged: boolean;
+    result?: unknown;
+    error?: string;
+  };
+  run_finished: {
+    status: AgentStatus;
+    terminationReason: string;
+    changedFiles: string[];
+    successfulFinalState: boolean;
+  };
 }
+
+export type AgentEventType = keyof AgentEventPayloads;
+
+/** A discriminated union: narrowing on `type` gives the matching payload type. */
+export type AgentEvent = {
+  [K in AgentEventType]: {
+    schemaVersion: typeof AGENT_EVENT_SCHEMA_VERSION;
+    sequence: number;
+    timestamp: string;
+    type: K;
+    payload: AgentEventPayloads[K];
+  };
+}[AgentEventType];
 
 export interface UsageSummary {
   providerInputTokens: number;

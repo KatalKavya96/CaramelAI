@@ -179,6 +179,11 @@ export async function runAutonomousTask(
           continue;
         }
 
+        await events.write("step_started", {
+          step: steps,
+          action: decision.action,
+          ...(decision.intent === undefined ? {} : { intent: decision.intent }),
+        });
         const observation = await dispatchAction({
           action: decision.action,
           repository,
