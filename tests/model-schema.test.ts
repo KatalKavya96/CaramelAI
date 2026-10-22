@@ -166,3 +166,23 @@ describe("model decision JSON schema", () => {
     );
   });
 });
+
+describe("usage metering", () => {
+  test("adds up reported cost and counts calls that did not report one", async () => {
+    const { emptyUsageSummary, recordUsage } = await import("../src/agent/types");
+    const summary = emptyUsageSummary();
+    recordUsage(summary, { source: "provider", inputTokens: 100, outputTokens: 10, totalTokens: 110, cachedInputTokens: 60, costUsd: 0.001 });
+    recordUsage(summary, { source: "provider", inputTokens: 100, outputTokens: 10, totalTokens: 110, costUsd: 0.002 });
+    recordUsage(summary, { source: "provider", inputTokens: 5, outputTokens: 5, totalTokens: 10 });
+    recordUsage(summary, { source: "unavailable" });
+    expect(summary).toMatchObject({ providerTotalTokens: 230, cachedInputTokens: 60, costUnknownCalls: 1, unavailableCalls: 1 });
+    expect(summary.providerCostUsd).toBeCloseTo(0.003, 10);
+  });
+
+  test("rejects a negative or non-numeric cost as bad accounting", () => {
+    expect(() => parseProviderUsage({ inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: -1 })).toThrow();
+    expect(parseProviderUsage({ inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: null })).toEqual({
+      source: "provider", inputTokens: 1, outputTokens: 1, totalTokens: 2,
+    });
+  });
+});

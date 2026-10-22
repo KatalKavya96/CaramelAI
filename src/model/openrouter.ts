@@ -69,12 +69,21 @@ export class OpenRouterTransport implements ModelTransport {
       }
       const result = response as {
         choices: Array<{ message?: { content?: unknown } }>;
-        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+          cost?: number | null;
+          promptTokensDetails?: { cachedTokens?: number } | null;
+        };
       };
       const usage = result.usage === undefined ? undefined : {
         inputTokens: result.usage.promptTokens,
         outputTokens: result.usage.completionTokens,
         totalTokens: result.usage.totalTokens,
+        // OpenRouter reports the charge itself, so cost needs no price table that could go stale.
+        cachedInputTokens: result.usage.promptTokensDetails?.cachedTokens,
+        costUsd: result.usage.cost,
       };
       return { output: textContent(result.choices[0]?.message?.content), usage };
     } catch (error) {

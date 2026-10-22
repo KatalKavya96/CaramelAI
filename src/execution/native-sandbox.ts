@@ -134,8 +134,9 @@ function spawnGroup(argv: readonly string[], cwd: string, environment: Record<st
     });
   });
   return {
-    stdout: Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
-    stderr: Readable.toWeb(child.stderr!) as ReadableStream<Uint8Array>,
+    // Node's and the DOM's ReadableStream types differ; at runtime Bun has one stream class.
+    stdout: Readable.toWeb(child.stdout!) as unknown as ReadableStream<Uint8Array>,
+    stderr: Readable.toWeb(child.stderr!) as unknown as ReadableStream<Uint8Array>,
     exited,
     kill: killGroup,
   };

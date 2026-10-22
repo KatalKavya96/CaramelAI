@@ -69,6 +69,10 @@ export class RunLimitError extends Error {
   }
 }
 
+export type ApplyResult =
+  | { applied: true; files: string[] }
+  | { applied: false; reason: "already_applied" | "conflicts" | "no_changes"; conflicts: string[]; message: string };
+
 export interface RunServiceOptions {
   runsRoot: string;
   policy: RunRequestPolicy;
@@ -180,6 +184,36 @@ export class RunService {
       .map((run) => this.view(run));
   }
 
+  /**
+   * Writes a finished local run's patch into the user's real folder. Checked first and applied
+   * all-or-nothing, so a folder that changed since the run is reported, never half-patched.
+   * A follow-up's patch builds on its parent's, so the parent must be applied first.
+   */
+  async apply(ownerId: string, id: string): Promise<ApplyResult> {
+    const record = this.owned(ownerId, id);
+    if (ACTIVE.has(record.status)) throw new RunConflictError("The run has not finished yet.");
+    if (record.request.repo.kind !== "local") {
+      throw new RunConflictError("Only runs on a local folder can be applied; download the patch instead.");
+    }
+    const patchPath = resolve(this.runDir(id), "output", "patch.diff");
+    const patch = await readFile(patchPath, "utf8").catch(() => "");
+    if (patch.trim() === "") return { applied: false, reason: "no_changes", conflicts: [], message: "This run changed nothing." };
+    const folder = record.request.repo.path;
+    const git = (...args: string[]) => runGit(["apply", "--binary", "--whitespace=nowarn", ...args, patchPath], folder);
+    const check = await git("--check");
+    if (!check.ok) {
+      if ((await git("--check", "--reverse")).ok) {
+        return { applied: false, reason: "already_applied", conflicts: [], message: "These changes are already in the folder." };
+      }
+      const conflicts = [...new Set([...check.stderr.matchAll(/^error: (?:patch failed: )?([^:\n]+)/gm)].map((match) => match[1]!.trim()))];
+      return { applied: false, reason: "conflicts", conflicts, message: check.stderr.trim() };
+    }
+    const applied = await git();
+    if (!applied.ok) throw new Error(`git apply failed after a clean check: ${applied.stderr.trim()}`);
+    const files = [...patch.matchAll(/^diff --git a\/(.+?) b\//gm)].map((match) => match[1]!);
+    return { applied: true, files };
+  }
+
   /** Stops taking work, cancels every queued and running run, and waits for them to settle. */
   async close(): Promise<void> {
     this.queue.splice(0);
@@ -250,6 +284,7 @@ export class RunService {
       ...(parent.request.model === undefined ? {} : { model: parent.request.model }),
       budgets: parsed.data.budgets,
       ...(verificationCommands === undefined ? {} : { verificationCommands }),
+      network: parsed.data.network ?? parent.request.network,
     }, this.options.policy);
     return { request, parentRunId: parent.id };
   }
@@ -343,7 +378,7 @@ export class RunService {
           maxSteps: record.request.budgets.maxSteps,
           maxMinutes: record.request.budgets.maxMinutes,
           maxModelCalls: record.request.budgets.maxModelCalls,
-          commandNetwork: this.options.policy.commandNetwork,
+          commandNetwork: record.request.network === "full" ? "bridge" : "none",
           sandbox: this.options.policy.sandbox,
           // Commands must never see other runs or the server's key store.
           sandboxDenyRead: [this.options.runsRoot],
@@ -376,6 +411,17 @@ export class RunService {
       });
     }
   }
+}
+
+async function runGit(args: string[], cwd: string): Promise<{ ok: boolean; stderr: string }> {
+  const process = Bun.spawn(["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args], {
+    cwd,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const [stderr, exitCode] = await Promise.all([new Response(process.stderr).text(), process.exited]);
+  return { ok: exitCode === 0, stderr };
 }
 
 async function runGitOrThrow(args: string[], cwd: string | undefined, failure: string): Promise<void> {
