@@ -135,3 +135,34 @@ describe("model response schema", () => {
     expect(fromJson.questions[0].options[0]).toBe("Knex.js (recommended)");
   });
 });
+
+describe("model decision JSON schema", () => {
+  const { MODEL_DECISION_SCHEMA, ModelActionSchema } = require("../src/model");
+  const variants = (MODEL_DECISION_SCHEMA as any).properties.action.anyOf as any[];
+
+  test("is generated from the zod schema, so every action type is offered to the provider", () => {
+    const zodTypes = ModelActionSchema.options.map((option: any) => option.shape.type.value).sort();
+    const jsonTypes = variants.map((variant) => variant.properties.type.const).sort();
+    expect(jsonTypes).toEqual(zodTypes);
+    expect(JSON.stringify(MODEL_DECISION_SCHEMA)).not.toContain("oneOf");
+  });
+
+  test("keeps required fields and positive integers in sync with the parser", () => {
+    const read = variants.find((variant) => variant.properties.type.const === "read_file");
+    expect(read.required).toEqual(["type", "path"]);
+    expect(read.properties.startLine.type).toBe("integer");
+    const command = variants.find((variant) => variant.properties.type.const === "run_command");
+    expect(command.properties.purpose.enum).toEqual(["setup", "agent", "verification"]);
+  });
+
+  test("rejects whitespace-only strings in the zod schema itself, not only in a hand parser", () => {
+    const { ModelDecisionSchema } = require("../src/model");
+    expect(ModelDecisionSchema.safeParse({ action: { type: "finish", summary: "   " } }).success).toBe(false);
+    expect(() => parseModelDecision({ action: { type: "finish", summary: "  " } })).toThrow(
+      "action.summary must be a non-empty string",
+    );
+    expect(() => parseModelDecision({ action: { type: "read_file", path: "a", startLine: 0 } })).toThrow(
+      "action.startLine must be a positive integer",
+    );
+  });
+});

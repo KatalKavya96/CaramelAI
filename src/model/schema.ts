@@ -8,24 +8,36 @@ export class ModelResponseValidationError extends Error {
   }
 }
 
+// These zod schemas are the single source of truth: the parser validates with them and the
+// provider JSON Schema is generated from them, so the two can never drift apart.
+const nonEmptyString = (location: string) => {
+  const message = `${location} must be a non-empty string.`;
+  return z.string({ error: message }).refine((value) => value.trim() !== "", { message });
+};
+const anyString = (location: string) => z.string({ error: `${location} must be a string.` });
+const positiveInteger = (location: string) => {
+  const error = `${location} must be a positive integer.`;
+  return z.number({ error }).int({ error }).positive({ error });
+};
+
 export const ListFilesActionSchema = z.object({
   type: z.literal("list_files"),
-  path: z.string().min(1).optional(),
-  maxDepth: z.number().int().positive().optional(),
+  path: nonEmptyString("action.path").optional(),
+  maxDepth: positiveInteger("action.maxDepth").optional(),
 });
 
 export const SearchActionSchema = z.object({
   type: z.literal("search"),
-  query: z.string().min(1, "action.query must be a non-empty string."),
-  path: z.string().min(1).optional(),
-  maxResults: z.number().int().positive().optional(),
+  query: nonEmptyString("action.query"),
+  path: nonEmptyString("action.path").optional(),
+  maxResults: positiveInteger("action.maxResults").optional(),
 });
 
 export const ReadFileActionSchema = z.object({
   type: z.literal("read_file"),
-  path: z.string().min(1, "action.path must be a non-empty string."),
-  startLine: z.number().int().positive().optional(),
-  endLine: z.number().int().positive().optional(),
+  path: nonEmptyString("action.path"),
+  startLine: positiveInteger("action.startLine").optional(),
+  endLine: positiveInteger("action.endLine").optional(),
 }).refine(
   (data) => data.startLine === undefined || data.endLine === undefined || data.endLine >= data.startLine,
   { message: "action.endLine must be greater than or equal to action.startLine." },
@@ -33,40 +45,40 @@ export const ReadFileActionSchema = z.object({
 
 export const ApplyPatchActionSchema = z.object({
   type: z.literal("apply_patch"),
-  patch: z.string().min(1, "action.patch must be a non-empty string."),
+  patch: nonEmptyString("action.patch"),
 });
 
 export const ReplaceTextActionSchema = z.object({
   type: z.literal("replace_text"),
-  path: z.string().min(1, "action.path must be a non-empty string."),
-  search: z.string().min(1, "action.search must be a non-empty string."),
-  replacement: z.string({ message: "action.replacement must be a string." }),
+  path: nonEmptyString("action.path"),
+  search: nonEmptyString("action.search"),
+  replacement: anyString("action.replacement"),
 });
 
 export const ReplaceFileActionSchema = z.object({
   type: z.literal("replace_file"),
-  path: z.string().min(1, "action.path must be a non-empty string."),
-  content: z.string({ message: "action.content must be a string." }),
+  path: nonEmptyString("action.path"),
+  content: anyString("action.content"),
 });
 
 export const CreateCheckpointActionSchema = z.object({
   type: z.literal("create_checkpoint"),
-  label: z.string().min(1, "action.label must be a non-empty string."),
+  label: nonEmptyString("action.label"),
 });
 
 export const RestoreCheckpointActionSchema = z.object({
   type: z.literal("restore_checkpoint"),
-  checkpointId: z.string().min(1, "action.checkpointId must be a non-empty string."),
+  checkpointId: nonEmptyString("action.checkpointId"),
 });
 
 export const RunCommandActionSchema = z.object({
   type: z.literal("run_command"),
-  command: z.string().min(1, "action.command must be a non-empty string."),
+  command: nonEmptyString("action.command"),
   purpose: z.enum(["setup", "agent", "verification"], {
-    message: "action.purpose must be setup, agent, or verification.",
+    error: "action.purpose must be setup, agent, or verification.",
   }).optional(),
-  cwd: z.string().optional(),
-  timeoutMs: z.number().int().positive().optional(),
+  cwd: nonEmptyString("action.cwd").optional(),
+  timeoutMs: positiveInteger("action.timeoutMs").optional(),
 });
 
 export const InspectDiffActionSchema = z.object({
@@ -75,7 +87,7 @@ export const InspectDiffActionSchema = z.object({
 
 export const FinishActionSchema = z.object({
   type: z.literal("finish"),
-  summary: z.string({ message: "action.summary must be a string." }),
+  summary: nonEmptyString("action.summary"),
 });
 
 export const ModelActionSchema = z.discriminatedUnion("type", [
@@ -93,15 +105,28 @@ export const ModelActionSchema = z.discriminatedUnion("type", [
 ]);
 
 export const ModelDecisionSchema = z.object({
-  intent: z.string().optional(),
+  intent: nonEmptyString("intent").optional(),
   action: ModelActionSchema,
 });
 
-export const ProviderUsageSchema = z.object({
-  inputTokens: z.number().int().nonnegative(),
-  outputTokens: z.number().int().nonnegative(),
-  totalTokens: z.number().int().nonnegative(),
-});
+const ACTION_TYPES: ReadonlySet<string> = new Set(ModelActionSchema.options.map((option) => option.shape.type.value));
+
+// Compile-time guard: ModelAction in types.ts and the schema must name the same action types.
+type SchemaActionType = z.infer<typeof ModelActionSchema>["type"];
+const actionTypesMatch: [ModelAction["type"]] extends [SchemaActionType]
+  ? [SchemaActionType] extends [ModelAction["type"]] ? true : never
+  : never = true;
+void actionTypesMatch;
+
+/**
+ * JSON Schema for providers that support structured output, generated from ModelDecisionSchema.
+ * Refinements (non-blank strings, line order) cannot be expressed here, so the parser still runs.
+ */
+export function modelDecisionJsonSchema(): Record<string, unknown> {
+  const { $schema: _dialect, ...schema } = z.toJSONSchema(ModelDecisionSchema, { unrepresentable: "any" });
+  // Discriminated by `type`, so oneOf and anyOf accept the same objects; anyOf has wider provider support.
+  return JSON.parse(JSON.stringify(schema).replaceAll('"oneOf":', '"anyOf":')) as Record<string, unknown>;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -174,157 +199,20 @@ function normalizeAction(response: Record<string, unknown>): unknown {
   return action;
 }
 
-function requiredString(value: unknown, location: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new ModelResponseValidationError(`${location} must be a non-empty string.`);
-  }
-  return value;
-}
-
-function optionalString(value: unknown, location: string): string | undefined {
-  if (value === undefined) return undefined;
-  return requiredString(value, location);
-}
-
-function optionalPositiveInteger(value: unknown, location: string): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new ModelResponseValidationError(`${location} must be a positive integer.`);
-  }
-  return value;
-}
-
-function withOptional<T extends object, K extends string, V>(
-  target: T,
-  key: K,
-  value: V | undefined,
-): T & Partial<Record<K, V>> {
-  return value === undefined ? target : Object.assign(target, { [key]: value });
-}
-
-function parseAction(value: unknown): ModelAction {
-  const action = record(value, "action");
-  const type = requiredString(action.type, "action.type");
-
-  switch (type) {
-    case "list_files": {
-      const result: { type: "list_files"; path?: string; maxDepth?: number } = {
-        type: "list_files",
-      };
-      withOptional(result, "path", optionalString(action.path, "action.path"));
-      withOptional(result, "maxDepth", optionalPositiveInteger(action.maxDepth, "action.maxDepth"));
-      return result;
-    }
-    case "search": {
-      const result: { type: "search"; query: string; path?: string; maxResults?: number } = {
-        type: "search",
-        query: requiredString(action.query, "action.query"),
-      };
-      withOptional(result, "path", optionalString(action.path, "action.path"));
-      withOptional(
-        result,
-        "maxResults",
-        optionalPositiveInteger(action.maxResults, "action.maxResults"),
-      );
-      return result;
-    }
-    case "read_file": {
-      const startLine = optionalPositiveInteger(action.startLine, "action.startLine");
-      const endLine = optionalPositiveInteger(action.endLine, "action.endLine");
-      if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
-        throw new ModelResponseValidationError(
-          "action.endLine must be greater than or equal to action.startLine.",
-        );
-      }
-      const result: {
-        type: "read_file";
-        path: string;
-        startLine?: number;
-        endLine?: number;
-      } = {
-        type: "read_file",
-        path: requiredString(action.path, "action.path"),
-      };
-      withOptional(result, "startLine", startLine);
-      withOptional(result, "endLine", endLine);
-      return result;
-    }
-    case "apply_patch":
-      return { type: "apply_patch", patch: requiredString(action.patch, "action.patch") };
-    case "replace_text":
-      return {
-        type: "replace_text",
-        path: requiredString(action.path, "action.path"),
-        search: requiredString(action.search, "action.search"),
-        replacement: typeof action.replacement === "string"
-          ? action.replacement
-          : (() => { throw new ModelResponseValidationError("action.replacement must be a string."); })(),
-      };
-    case "replace_file":
-      return {
-        type: "replace_file",
-        path: requiredString(action.path, "action.path"),
-        content: typeof action.content === "string"
-          ? action.content
-          : (() => { throw new ModelResponseValidationError("action.content must be a string."); })(),
-      };
-    case "create_checkpoint":
-      return { type: "create_checkpoint", label: requiredString(action.label, "action.label") };
-    case "restore_checkpoint":
-      return {
-        type: "restore_checkpoint",
-        checkpointId: requiredString(action.checkpointId, "action.checkpointId"),
-      };
-    case "run_command": {
-      const result: {
-        type: "run_command";
-        command: string;
-        purpose?: "setup" | "agent" | "verification";
-        cwd?: string;
-        timeoutMs?: number;
-      } = {
-        type: "run_command",
-        command: requiredString(action.command, "action.command"),
-      };
-      if (action.purpose !== undefined) {
-        if (
-          action.purpose !== "setup" &&
-          action.purpose !== "agent" &&
-          action.purpose !== "verification"
-        ) {
-          throw new ModelResponseValidationError(
-            "action.purpose must be setup, agent, or verification.",
-          );
-        }
-        result.purpose = action.purpose;
-      }
-      withOptional(result, "cwd", optionalString(action.cwd, "action.cwd"));
-      withOptional(
-        result,
-        "timeoutMs",
-        optionalPositiveInteger(action.timeoutMs, "action.timeoutMs"),
-      );
-      return result;
-    }
-    case "inspect_diff":
-      return { type: "inspect_diff" };
-    case "finish":
-      return { type: "finish", summary: requiredString(action.summary, "action.summary") };
-    default:
-      throw new ModelResponseValidationError(`Unknown action type: ${type}.`);
-  }
-}
-
 export function parseModelDecision(value: unknown): ModelDecision {
-  let decoded = value;
-  if (typeof value === "string") {
-    decoded = decodeJson(value);
-  }
-
+  const decoded = typeof value === "string" ? decodeJson(value) : value;
   const response = record(decoded, "model output");
-  const intent = optionalString(response.intent, "intent");
-  const decision: ModelDecision = { action: parseAction(normalizeAction(response)) };
-  if (intent !== undefined) decision.intent = intent;
+  const action = record(normalizeAction(response), "action");
+  if (typeof action.type !== "string" || !ACTION_TYPES.has(action.type)) {
+    throw new ModelResponseValidationError(`Unknown action type: ${String(action.type)}.`);
+  }
+  const parsed = ModelDecisionSchema.safeParse({ intent: response.intent, action });
+  if (!parsed.success) {
+    throw new ModelResponseValidationError(parsed.error.issues[0]?.message ?? "Invalid model decision.");
+  }
+  // Zod types absent optionals as `?: T | undefined`; parsed JSON never holds explicit undefined.
+  const decision: ModelDecision = { action: parsed.data.action as ModelAction };
+  if (parsed.data.intent !== undefined) decision.intent = parsed.data.intent;
   return decision;
 }
 
