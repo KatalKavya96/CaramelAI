@@ -513,14 +513,21 @@ export class IsolatedWorkspace {
     }
   }
 
+  /**
+   * Three git processes and no full diff in memory: stage everything once, hash the tree
+   * (a Merkle hash, cheap because git reuses cached index entries), and list changed paths.
+   */
   async inspectChanges(): Promise<WorkspaceResult<WorkspaceState>> {
     try {
-      const patch = await patchFromBaseline(this.git, this.baselineRevision);
-      return success({
-        patchSha256: sha256(patch),
-        changedFiles: await changedFiles(this.git, this.baselineRevision),
-        bytes: Buffer.byteLength(patch),
-      });
+      await requireGit(this.workspacePath, ["add", "-A", "--", "."], undefined, this.git);
+      const fingerprint = (await requireGit(this.workspacePath, ["write-tree"], undefined, this.git)).trim();
+      const names = await requireGit(
+        this.workspacePath,
+        ["diff", "--cached", "--name-only", "-z", this.baselineRevision, "--", "."],
+        undefined,
+        this.git,
+      );
+      return success({ fingerprint, changedFiles: names.split("\0").filter(Boolean).sort() });
     } catch (error) {
       return failure(error);
     }

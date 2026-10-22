@@ -360,3 +360,22 @@ describe("IsolatedWorkspace generated files", () => {
     expect(await readFile(exported.value.patchPath, "utf8")).not.toContain("__pycache__");
   });
 });
+
+describe("IsolatedWorkspace fingerprint", () => {
+  test("is content-addressed: an edit changes it and reverting the edit restores it", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+    const fingerprintOf = async () => {
+      const state = await workspace.inspectChanges();
+      if (!state.ok) throw new Error(state.error.message);
+      return state.value.fingerprint;
+    };
+    const baseline = await fingerprintOf();
+    expect(await fingerprintOf()).toBe(baseline);
+    await writeFile(join(workspace.workspacePath, "a.txt"), "edited\n");
+    const edited = await fingerprintOf();
+    expect(edited).not.toBe(baseline);
+    await writeFile(join(workspace.workspacePath, "a.txt"), "alpha\n");
+    expect(await fingerprintOf()).toBe(baseline);
+  });
+});

@@ -2,7 +2,7 @@ import type { CommandResult } from "../execution";
 import type { ModelAdapter } from "../model";
 import { SYSTEM_PROMPT } from "../prompts";
 import type { FailureRecord } from "../recovery";
-import { currentState, dispatchAction, safeFingerprint } from "./action-dispatcher";
+import { currentState, dispatchAction, UNAVAILABLE_FINGERPRINT } from "./action-dispatcher";
 import { executeModelTurn } from "./model-turn";
 import { processToolObservation } from "./observation-handler";
 import {
@@ -58,6 +58,8 @@ export async function runAutonomousTask(
 
   // Any unexpected error still ends in finalizeRun, so every run leaves result.json and report.md.
   try {
+    // Workspace state is computed once per action and carried forward: only actions change it.
+    let lastState = await currentState(workspace);
     while (true) {
       const remainingTimeMs = deadline - now();
       if (remainingTimeMs <= 0 || steps >= options.maxSteps || modelCalls >= options.maxModelCalls) {
@@ -72,8 +74,7 @@ export async function runAutonomousTask(
       }
 
       if (!reserveActive && budgets.verificationReserveSteps > 0) {
-        const state = await currentState(workspace);
-        if (state.changedFiles.length > 0 && steps >= options.maxSteps - budgets.verificationReserveSteps - 1) {
+        if (lastState.changedFiles.length > 0 && steps >= options.maxSteps - budgets.verificationReserveSteps - 1) {
           reserveActive = true;
           verificationReserveActivations += 1;
           memory.recordGuidance(
@@ -87,7 +88,7 @@ export async function runAutonomousTask(
         {
           model: dependencies.model,
           memory,
-          workspace,
+          codeFingerprint: lastState.fingerprint,
           events,
           usage,
           failures,
@@ -114,10 +115,9 @@ export async function runAutonomousTask(
 
       if (decision.action.type === "finish") {
         summary = decision.action.summary;
-        const state = await currentState(workspace);
         const finishOutcome = evaluateFinishDecision(
-          state.changedFiles.length,
-          state.patchSha256,
+          lastState.changedFiles.length,
+          lastState.fingerprint,
           verifiedPatchSha,
           diffReviewedPatchSha,
         );
@@ -166,14 +166,15 @@ export async function runAutonomousTask(
           readCache,
           memory,
           remainingTimeMs: Math.max(1, deadline - now()),
+          before: lastState,
         });
+        lastState = observation.state;
 
         const obsOutcome = await processToolObservation(
           {
             action: decision.action,
             intent: decision.intent,
             observation,
-            workspace,
             memory,
             progress,
             events,
@@ -211,13 +212,14 @@ export async function runAutonomousTask(
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
+        const refreshed = await workspace.inspectChanges();
         const failure: FailureRecord = {
           sequence: failures.length + 1,
           kind: "tool",
           hypothesis: decision.intent ?? null,
           action: decision.action.type,
           detail,
-          codeFingerprint: await safeFingerprint(workspace),
+          codeFingerprint: refreshed.ok ? refreshed.value.fingerprint : UNAVAILABLE_FINGERPRINT,
           countsAgainstRepairLimit: false,
         };
         failures.push(failure);
@@ -228,6 +230,8 @@ export async function runAutonomousTask(
           error: detail,
         });
         memory.recordObservation(decision.action, { ok: false, error: detail });
+        if (!refreshed.ok) throw new Error(refreshed.error.message);
+        lastState = refreshed.value;
       }
     }
   } catch (error) {

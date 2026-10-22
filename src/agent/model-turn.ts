@@ -1,8 +1,6 @@
 import { ModelError, type ModelAdapter, type ModelDecision } from "../model";
 import type { TaskMemory } from "../memory";
 import type { FailureRecord } from "../recovery";
-import type { IsolatedWorkspace } from "../workspace";
-import { safeFingerprint } from "./action-dispatcher";
 import type { AgentEventWriter } from "./events";
 import { statusForModelError } from "./policy";
 import { recordUsage, type AgentStatus, type UsageSummary } from "./types";
@@ -10,7 +8,8 @@ import { recordUsage, type AgentStatus, type UsageSummary } from "./types";
 export interface ModelTurnContext {
   model: ModelAdapter;
   memory: TaskMemory;
-  workspace: IsolatedWorkspace;
+  /** Fingerprint of the workspace while the model thinks; a model call never changes it. */
+  codeFingerprint: string;
   events: AgentEventWriter;
   usage: UsageSummary;
   failures: FailureRecord[];
@@ -30,7 +29,7 @@ export async function executeModelTurn(
     consecutiveInvalidResponses: number;
   },
 ): Promise<ModelTurnResult> {
-  const { model, memory, workspace, events, usage, failures, maxModelCalls, remainingTimeMs } = ctx;
+  const { model, memory, codeFingerprint, events, usage, failures, maxModelCalls, remainingTimeMs } = ctx;
 
   try {
     const turn = await model.complete(memory.request(), { remainingTimeMs });
@@ -56,7 +55,7 @@ export async function executeModelTurn(
       hypothesis: null,
       action: "model_call",
       detail: `${modelError.kind}: ${modelError.message}`,
-      codeFingerprint: await safeFingerprint(workspace),
+      codeFingerprint,
       countsAgainstRepairLimit: false,
     };
     failures.push(failure);
