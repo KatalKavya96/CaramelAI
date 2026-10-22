@@ -374,3 +374,8 @@
     transition: none;
   }
 }
+
+@media (max-width: 650px) {
+  .card-nav[data-narrow][data-open] .card-nav__panel { max-height: calc(100dvh - 100px); overflow-y: auto; }
+  .card-nav[data-narrow] .card-nav__link { min-height: 34px; }
+}

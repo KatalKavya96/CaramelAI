@@ -136,6 +136,7 @@ const CardNav = ({
   surface = 'glass',
   openOn = 'click',
   cardEffect = 'rise',
+  reducedMotion = false,
   stagger = 0.12,
   bounce = 0.2,
   speed = 1,
@@ -185,10 +186,10 @@ const CardNav = ({
   const vars = {
     ...palette,
     '--cn-max': `${maxWidth}px`,
-    '--cn-bar': '52px',
-    '--cn-inset': '6px',
-    '--cn-gap': '6px',
-    '--cn-radius': '12px',
+    '--cn-bar': '64px',
+    '--cn-inset': '9px',
+    '--cn-gap': '9px',
+    '--cn-radius': '16px',
     '--cn-logo': '22px',
     '--cn-card': `${cardHeight}px`
   };
@@ -216,14 +217,14 @@ const CardNav = ({
     const panel = panelRef.current;
     const content = contentRef.current;
     if (!panel || !content) return undefined;
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    const state = { p: settingsRef.current.open ? 1 : 0, v: 0, height: content.offsetHeight, bar: 52 };
+    const reduce = reducedMotion || (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+    const state = { p: settingsRef.current.open ? 1 : 0, v: 0, height: content.offsetHeight, bar: 64 };
     let raf = 0;
     let last = 0;
 
     const render = () => {
       const s = settingsRef.current;
-      state.bar = parseFloat(getComputedStyle(panel).getPropertyValue('--cn-bar')) || 52;
+      state.bar = parseFloat(getComputedStyle(panel).getPropertyValue('--cn-bar')) || 64;
       panel.style.height = `${state.bar + Math.max(0, state.p) * state.height}px`;
       const cards = cardRefs.current.filter(Boolean);
       const count = cards.length;
@@ -307,7 +308,7 @@ const CardNav = ({
       observer?.disconnect();
       engineRef.current = null;
     };
-  }, [items.length, hasCta, narrow]);
+  }, [items.length, hasCta, narrow, reducedMotion]);
 
   useLayoutEffect(() => {
     if (open) setShown(true);
@@ -358,7 +359,7 @@ const CardNav = ({
     const bar = barRef.current;
     if (!panel || !bar || !introRef.current || typeof panel.animate !== 'function') return;
     introRef.current = false;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (reducedMotion || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const width = panel.offsetWidth;
     const height = panel.offsetHeight;
     const radius = parseFloat(getComputedStyle(panel).borderTopLeftRadius) || 18;

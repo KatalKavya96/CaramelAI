@@ -8,6 +8,7 @@ beforeEach(() => {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
   });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   document.documentElement.dataset.theme = "light";
   window.matchMedia = ((query: string) => ({ matches: query.includes("reduce"), media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia;
 });
@@ -40,7 +41,7 @@ describe("Landing interactions", () => {
   it("downloads an actual illustrative patch rather than linking to a missing release", () => {
     render(<ProductPreview />);
     const link = screen.getByRole("link", { name: "Download example patch" });
-    expect(link).toHaveAttribute("download", "caramel-example.patch");
+    expect(link).toHaveAttribute("download", "caramel-bug-example.patch");
     const href = link.getAttribute("href") ?? "";
     expect(decodeURIComponent(href)).toContain("+export const DEFAULT_SESSION_TIMEOUT = 30 * 60 * 1000;");
   });

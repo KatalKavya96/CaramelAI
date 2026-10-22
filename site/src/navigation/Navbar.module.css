@@ -1,8 +1,11 @@
-/* Scribecode's floating CardNav composition, using Caramel's theme tokens. */
-.header { pointer-events:none; position:fixed; top:12px; left:0; right:0; z-index:40; }
-.container { pointer-events:auto; display:flex; align-items:flex-start; gap:8px; max-width:800px; width:100%; padding:0 20px; margin:0 auto; }
+/* Scribecode's floating CardNav composition, with a little more room to breathe. */
+.header { pointer-events:none; position:fixed; top:16px; left:0; right:0; z-index:40; }
+.container { pointer-events:auto; display:flex; align-items:flex-start; gap:10px; max-width:970px; width:100%; padding:0 24px; margin:0 auto; }
 .container > div { min-width:0; flex:1; }
-.logo { display:inline-flex; align-items:center; gap:7px; font-family:var(--font-brand); font-size:22px; font-weight:700; letter-spacing:-.7px; }
-.theme { display:grid; place-items:center; flex-shrink:0; width:40px; height:40px; margin-top:6px; color:var(--text-muted); background:var(--site-window); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow-sm); backdrop-filter:blur(20px); transition:background 160ms,color 160ms; }
-.theme:hover { background:var(--surface-raised); color:var(--text); }
-@media(max-width:600px){.container{padding:0 12px}.logo{font-size:21px}}
+.logo { display:inline-flex; align-items:center; gap:9px; font-family:var(--font-brand); font-size:22px; font-weight:700; letter-spacing:-.7px; }
+.theme,.search { display:flex; align-items:center; justify-content:center; flex-shrink:0; gap:8px; height:44px; margin-top:10px; color:var(--text-muted); background:var(--site-window); border:1px solid var(--border); border-radius:13px; box-shadow:var(--shadow-sm); backdrop-filter:blur(20px); transition:background 180ms,color 180ms,transform 180ms; }
+.theme { width:44px; }
+.search { padding:0 12px; }
+.search kbd { font:10px var(--font-ui); }
+.theme:hover,.search:hover { background:var(--surface-raised); color:var(--text); transform:translateY(-1px); }
+@media(max-width:650px){.container{padding:0 12px;gap:7px}.logo{font-size:21px}.search{padding:0;width:40px}.search kbd{display:none}.theme{width:40px}}
