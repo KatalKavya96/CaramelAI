@@ -48,6 +48,10 @@ export type ModelUsage =
       inputTokens: number;
       outputTokens: number;
       totalTokens: number;
+      /** Input tokens served from the provider's prompt cache, which are billed at a discount. */
+      cachedInputTokens?: number;
+      /** What the provider says it charged, in US dollars. Absent when it does not report cost. */
+      costUsd?: number;
     }
   | { source: "unavailable" };
 
