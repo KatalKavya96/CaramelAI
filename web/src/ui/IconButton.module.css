@@ -1,0 +1,17 @@
+.button {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border: 1px solid transparent; background: transparent; color: var(--text-muted);
+  border-radius: var(--radius-sm); cursor: pointer; transition: background var(--duration), opacity var(--duration);
+}
+.button:disabled { cursor: not-allowed; }
+.sm { width: 30px; height: 30px; }
+.md { width: 36px; height: 36px; }
+.lg { width: 46px; height: 46px; }
+.plain:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.outlined { border-radius: var(--radius-pill); border-color: var(--chip-border); background: var(--chip-bg); color: var(--text); }
+.outlined:hover:not(:disabled) { background: var(--surface-hover); }
+/* The round send button: caramel in light, pale grey in dark, exactly as in the mockups. */
+.send { border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-on); box-shadow: var(--shadow-sm); }
+.send:hover:not(:disabled) { filter: brightness(1.06); }
+.send:disabled { opacity: 0.45; box-shadow: none; }
+.stop { border-radius: var(--radius-md); background: var(--surface-raised); color: var(--text); border-color: var(--border); box-shadow: var(--shadow-sm); }

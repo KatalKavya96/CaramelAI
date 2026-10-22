@@ -1,0 +1,17 @@
+.overlay { position: fixed; inset: 0; background: var(--overlay); backdrop-filter: blur(2px); z-index: 50; animation: fade var(--duration) ease-out; }
+.content {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 51;
+  max-height: calc(100vh - 48px); overflow: auto;
+  background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg); padding: 24px; color: var(--text);
+  animation: pop var(--duration) ease-out;
+}
+.title { margin: 0 40px 6px 0; font-size: var(--text-xl); font-weight: 500; letter-spacing: -0.01em; }
+.description { margin: 0 0 20px; color: var(--text-muted); font-size: var(--text-md); }
+.close {
+  position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.close:hover { background: var(--surface-hover); color: var(--text); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: translate(-50%, -48%) scale(0.98); } }

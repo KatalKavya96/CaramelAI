@@ -1,0 +1,1 @@
+.content { z-index: 70; background: var(--tooltip-bg); color: var(--tooltip-text); font-size: var(--text-sm); padding: 7px 12px; border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }

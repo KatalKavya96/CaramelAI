@@ -1,0 +1,211 @@
+/*
+ * Layer 0: design tokens. Values are sampled from the Caramel mockups (light and dark).
+ * This is the only file that holds raw colours; every component reads these variables.
+ *
+ * Deliberate deviations from the mockups, all for WCAG AA contrast (4.5:1 text, 3:1 icons):
+ *   --label            #8a7062 -> #7a6052   (section labels were 4.4:1)
+ *   --accent-strong    #a6754b -> #8f6038   (white text on caramel buttons was 4.0:1)
+ *   --danger           #e5484d -> #c9302c   (white "Delete" text was 3.9:1)
+ *   --avatar-bg        #a18d7a -> #8a7462   (white initial was 3.2:1)
+ * The caramel send button keeps the exact mockup colour: it holds an icon, which needs 3:1.
+ */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f0ed;
+  --bg-cloud-a: rgba(255, 255, 255, 0.75);
+  --bg-cloud-b: rgba(226, 219, 212, 0.55);
+  --bg-cloud-c: rgba(248, 236, 225, 0.8);
+
+  --sidebar-bg: rgba(252, 250, 249, 0.82);
+  --sidebar-border: rgba(232, 226, 221, 0.9);
+  --sidebar-item-hover: rgba(120, 90, 60, 0.06);
+  --sidebar-item-active: rgba(166, 117, 75, 0.1);
+
+  --surface: rgba(253, 252, 251, 0.78);
+  --surface-solid: #fdfcfb;
+  --surface-raised: #ffffff;
+  --surface-sunken: rgba(244, 240, 237, 0.7);
+  --surface-hover: rgba(120, 90, 60, 0.05);
+  --border: #e7e2de;
+  --border-strong: #ddd5ce;
+  --composer-border: #ece4dc;
+
+  --text: #1d1b1a;
+  --text-muted: #6f6a66;
+  --text-subtle: #6f6a66;
+  --label: #7a6052;
+  --placeholder: #77716c;
+
+  --accent: #a6754b;
+  --accent-on: #ffffff;
+  --accent-strong: #8f6038;
+  --accent-strong-on: #ffffff;
+  --accent-text: #8f6038;
+  --accent-tint: rgba(166, 117, 75, 0.12);
+  --accent-tint-border: rgba(166, 117, 75, 0.35);
+  --mark: #a6754b;
+  --highlight-bg: rgba(214, 160, 110, 0.32);
+  --highlight-text: inherit;
+
+  --chip-bg: rgba(255, 255, 255, 0.55);
+  --chip-border: #e6e0da;
+  --chip-active-bg: rgba(166, 117, 75, 0.14);
+  --chip-active-text: #6b4424;
+
+  --kbd-bg: #efebe7;
+  --kbd-text: #6f6a66;
+
+  --avatar-bg: #8a7462;
+  --avatar-text: #ffffff;
+
+  --success: #2e7d4f;
+  --success-tint: rgba(46, 125, 79, 0.1);
+  --warning: #8a5a00;
+  --warning-tint: rgba(196, 140, 30, 0.12);
+  --danger: #c9302c;
+  --danger-on: #ffffff;
+  --danger-text: #b3261e;
+  --danger-icon: #e5484d;
+  --danger-tint: #fdeeed;
+  --danger-tint-border: #f3c9c6;
+
+  --diff-add-bg: #e7f3ea;
+  --diff-add-text: #1f5c38;
+  --diff-del-bg: #fbebea;
+  --diff-del-text: #8c1d18;
+
+  --code-bg: #f6f3f0;
+  --code-header: #efebe7;
+  --terminal-bg: #1f1d1b;
+  --terminal-text: #ede6df;
+
+  --tooltip-bg: #2a2827;
+  --tooltip-text: #ffffff;
+  --overlay: rgba(60, 45, 30, 0.16);
+  --focus: #a6754b;
+
+  --shadow-sm: 0 1px 2px rgba(80, 55, 30, 0.06);
+  --shadow-md: 0 8px 24px rgba(80, 55, 30, 0.08);
+  --shadow-lg: 0 24px 60px rgba(80, 55, 30, 0.14);
+  --shadow-composer: 0 18px 44px rgba(150, 105, 60, 0.12), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14171d;
+  --bg-cloud-a: rgba(70, 78, 90, 0.22);
+  --bg-cloud-b: rgba(40, 45, 54, 0.5);
+  --bg-cloud-c: rgba(90, 98, 110, 0.12);
+
+  --sidebar-bg: rgba(44, 50, 59, 0.88);
+  --sidebar-border: rgba(70, 76, 85, 0.6);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-item-active: rgba(255, 255, 255, 0.09);
+
+  --surface: rgba(44, 50, 60, 0.72);
+  --surface-solid: #2a2f37;
+  --surface-raised: #30353e;
+  --surface-sunken: rgba(20, 23, 29, 0.5);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --border: #3b3f46;
+  --border-strong: #474d55;
+  --composer-border: #3c434b;
+
+  --text: #ececec;
+  --text-muted: #a3a8b0;
+  --text-subtle: #a3a8b0;
+  --label: #a3a8b0;
+  --placeholder: #9aa0a8;
+
+  --accent: #dddddd;
+  --accent-on: #1b1f24;
+  --accent-strong: #e7e7e7;
+  --accent-strong-on: #1b1f24;
+  --accent-text: #e3e5e8;
+  --accent-tint: rgba(255, 255, 255, 0.08);
+  --accent-tint-border: rgba(255, 255, 255, 0.32);
+  --mark: #e8e8e8;
+  --highlight-bg: #e6e6e6;
+  --highlight-text: #1b1f24;
+
+  --chip-bg: rgba(255, 255, 255, 0.02);
+  --chip-border: #41464b;
+  --chip-active-bg: #e4e4e4;
+  --chip-active-text: #1b1f24;
+
+  --kbd-bg: rgba(255, 255, 255, 0.08);
+  --kbd-text: #a3a8b0;
+
+  --avatar-bg: #6a6b6d;
+  --avatar-text: #ffffff;
+
+  --success: #6fcf97;
+  --success-tint: rgba(111, 207, 151, 0.12);
+  --warning: #e8b44c;
+  --warning-tint: rgba(232, 180, 76, 0.12);
+  --danger: #c43c3c;
+  --danger-on: #ffffff;
+  --danger-text: #f28b82;
+  --danger-icon: #e5484d;
+  --danger-tint: rgba(150, 40, 40, 0.22);
+  --danger-tint-border: rgba(229, 72, 77, 0.45);
+
+  --diff-add-bg: #1c3326;
+  --diff-add-text: #a6e3be;
+  --diff-del-bg: #3b1f1d;
+  --diff-del-text: #f6b4ad;
+
+  --code-bg: #1e2228;
+  --code-header: #262a31;
+  --terminal-bg: #0f1115;
+  --terminal-text: #e6e6e6;
+
+  --tooltip-bg: #3a3f47;
+  --tooltip-text: #ffffff;
+  --overlay: rgba(5, 7, 10, 0.45);
+  --focus: #e6e6e6;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.5);
+  --shadow-composer: 0 18px 44px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+
+:root {
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-brand: "Figtree", "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --text-xs: 12px;
+  --text-sm: 13.5px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-hero: 40px;
+
+  --sidebar-width: 280px;
+  --sidebar-rail-width: 64px;
+  --duration: 160ms;
+}

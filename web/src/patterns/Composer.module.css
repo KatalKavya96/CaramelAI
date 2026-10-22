@@ -1,0 +1,18 @@
+.composer {
+  width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 20px;
+  background: var(--surface); border: 1px solid var(--composer-border); border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-composer); backdrop-filter: blur(20px); cursor: text;
+}
+.compact { padding: 14px 16px 14px; gap: 10px; border-radius: var(--radius-xl); }
+.input {
+  width: 100%; border: 0; outline: none; resize: none; background: transparent; color: var(--text);
+  font-size: 18px; line-height: 1.5; min-height: 54px; max-height: 280px; field-sizing: content; padding: 2px 4px;
+}
+.input:focus-visible { outline: none; }
+.composer:focus-within { border-color: var(--accent-tint-border); }
+.compact .input { font-size: 16px; min-height: 28px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; cursor: default; }
+.tools, .trailing { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.trailing { margin-left: auto; }
+.footnote { font-size: var(--text-sm); color: var(--text-muted); padding: 0 4px; }
+@media (max-width: 600px) { .composer { padding: 16px; } .input { font-size: 16px; } }

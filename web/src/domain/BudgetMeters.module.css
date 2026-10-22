@@ -1,0 +1,5 @@
+.list { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: var(--text-sm); }
+.row dt { color: var(--text-muted); }
+.row dd { margin: 0; font-variant-numeric: tabular-nums; }
+.bar { grid-column: 1 / -1; }

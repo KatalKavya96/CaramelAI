@@ -1,0 +1,21 @@
+.overlay { position: fixed; inset: 0; background: var(--overlay); backdrop-filter: blur(2px); z-index: 50; }
+.panel {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 51;
+  width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto;
+  display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 0;
+  background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg);
+}
+.tabs { display: flex; flex-direction: column; gap: 4px; padding: 20px 14px; border-right: 1px solid var(--border); }
+.tab { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 14px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text); cursor: pointer; font-size: var(--text-md); text-align: left; }
+.tab:hover { background: var(--surface-hover); }
+.tabActive, .tabActive:hover { background: var(--accent-tint); }
+:root[data-theme="dark"] .tabActive, :root[data-theme="dark"] .tabActive:hover { background: rgba(255, 255, 255, 0.1); }
+.body { padding: 28px 28px 24px; min-width: 0; }
+.title { margin: 0 0 18px; font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
+.close { position: absolute; top: 18px; right: 18px; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.close:hover { background: var(--surface-hover); color: var(--text); }
+@media (max-width: 700px) {
+  .panel { grid-template-columns: 1fr; }
+  .tabs { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 12px; }
+  .tab { flex: none; }
+}

@@ -1,0 +1,12 @@
+.wrap { display: flex; flex-direction: column; gap: 10px; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.row { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start; }
+.ok { color: var(--success); padding-top: 1px; }
+.bad { color: var(--danger-icon); padding-top: 1px; }
+.neutral { color: var(--text-muted); padding-top: 1px; }
+.body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.command { font: 500 13px var(--font-mono); overflow-wrap: anywhere; }
+.meta { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.empty { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.baseline { font-size: var(--text-sm); color: var(--text-muted); }
+.baseline summary { cursor: pointer; margin-bottom: 8px; }

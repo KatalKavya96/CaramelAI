@@ -1,0 +1,4 @@
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.title { margin: 14px 0 0; font-size: var(--text-hero); font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; }
+.subtitle { margin: 0; font-size: 18px; color: var(--text-muted); max-width: 640px; }
+@media (max-width: 600px) { .title { font-size: 30px; } .subtitle { font-size: 16px; } }
