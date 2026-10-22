@@ -357,6 +357,28 @@ describe("autonomous agent vertical slice", () => {
     expect(result.verification.evidence.map((evidence) => evidence.trusted)).toEqual([false, true]);
   });
 
+  test("still verifies when the verification command writes cache files", async () => {
+    const source = await codingFixture();
+    const parent = await temporaryDirectory("dinner-agent-output-");
+    const verify = "mkdir -p __pycache__ .pytest_cache && touch __pycache__/math.pyc && bun test";
+    const result = await runAutonomousTask(
+      { repoPath: source, outputPath: join(parent, "run"), task: "Fix add.", maxSteps: 10, maxMinutes: 2, maxModelCalls: 10, verificationCommands: [verify] },
+      {
+        model: new FakeModelAdapter([
+          turn({ type: "apply_patch", patch: FIX_PATCH }),
+          turn({ type: "inspect_diff" }),
+          turn({ type: "run_command", command: verify, purpose: "verification" }),
+          turn({ type: "finish", summary: "Verified." }),
+        ]),
+        runId: "test-run",
+        createCommandExecutor: async (workspacePath, logsPath) => new LocalCommandExecutor(workspacePath, logsPath),
+      },
+    );
+
+    expect(result.status).toBe("verified");
+    expect(result.changedFiles).toEqual(["src/math.ts"]);
+  });
+
   test("invalidates successful verification after a later edit", async () => {
     const source = await codingFixture();
     const secondPatch = FIX_PATCH.replace("-  return a - b;", "-  return a + b;").replace(

@@ -339,3 +339,24 @@ describe("IsolatedWorkspace git boundary", () => {
     });
   });
 });
+
+describe("IsolatedWorkspace generated files", () => {
+  test("ignores common build and test artifacts in the state and the exported patch", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+    await mkdir(join(workspace.workspacePath, "__pycache__"), { recursive: true });
+    await writeFile(join(workspace.workspacePath, "__pycache__", "a.cpython-312.pyc"), "bytecode");
+    await mkdir(join(workspace.workspacePath, "node_modules", "left-pad"), { recursive: true });
+    await writeFile(join(workspace.workspacePath, "node_modules", "left-pad", "index.js"), "module.exports = 1;\n");
+    await mkdir(join(workspace.workspacePath, ".pytest_cache"), { recursive: true });
+    await writeFile(join(workspace.workspacePath, ".pytest_cache", "README.md"), "cache\n");
+    await writeFile(join(workspace.workspacePath, "real-change.txt"), "kept\n");
+
+    const state = await workspace.inspectChanges();
+    if (!state.ok) throw new Error(state.error.message);
+    expect(state.value.changedFiles).toEqual(["real-change.txt"]);
+    const exported = await workspace.exportPatch();
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(await readFile(exported.value.patchPath, "utf8")).not.toContain("__pycache__");
+  });
+});
