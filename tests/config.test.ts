@@ -38,6 +38,14 @@ describe("loadRunConfig", () => {
     expect(config.model).toBe("openai/gpt-5.2");
   });
 
+  test("selects the command network mode", async () => {
+    const cwd = await temporaryDirectory();
+    const base = { cwd, env: { AI_API_KEY: "secret" } };
+    expect((await loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it"] })).commandNetwork).toBe("bridge");
+    expect((await loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it", "--network", "none"] })).commandNetwork).toBe("none");
+    await expect(loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it", "--network", "host"] })).rejects.toThrow(ConfigurationError);
+  });
+
   test("accepts one explicit verification command", async () => {
     const cwd = await temporaryDirectory();
     const config = await loadRunConfig({

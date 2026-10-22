@@ -30,6 +30,7 @@ export interface RunConfig {
   repositoryMapEnabled: boolean;
   /** Overrides the discovered checks that the completion gate trusts. */
   verificationCommands?: string[];
+  commandNetwork: "bridge" | "none";
   colorEnabled: boolean;
   budgets: {
     maxSteps: number;
@@ -74,6 +75,7 @@ interface RunArguments {
   plan?: string;
   color?: string;
   verify?: string;
+  network?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -106,6 +108,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--plan", "plan"],
   ["--color", "color"],
   ["--verify", "verify"],
+  ["--network", "network"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -287,6 +290,11 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       : args.plan === undefined || args.plan === "disabled" || args.plan === "false"
         ? false
         : (() => { throw new ConfigurationError("--plan must be enabled or disabled."); })(),
+    commandNetwork: args.network === undefined || args.network === "bridge"
+      ? "bridge"
+      : args.network === "none"
+        ? "none"
+        : (() => { throw new ConfigurationError("--network must be bridge or none."); })(),
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

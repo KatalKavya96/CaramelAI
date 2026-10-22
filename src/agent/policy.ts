@@ -1,3 +1,4 @@
+import type { CommandNetwork } from "../execution";
 import type { ModelAction, ModelAdapter, ModelError } from "../model";
 import type { AgentEvent, AgentStatus, CommandExecutor } from "./types";
 
@@ -18,6 +19,8 @@ export interface AutonomousRunOptions {
    * the repository's manifests are used. The model can run other commands but they never verify.
    */
   verificationCommands?: readonly string[];
+  /** Network for target-repository commands. Defaults to "bridge"; "none" blocks exfiltration. */
+  commandNetwork?: CommandNetwork;
   apiKey?: string;
 }
 

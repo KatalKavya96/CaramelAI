@@ -99,6 +99,24 @@ describe("Docker command construction", () => {
     expect(args.slice(-4)).toEqual(["dinner-runner:0.1.0", "/bin/sh", "-lc", "bun test"]);
   });
 
+  test("can run commands with no network at all", () => {
+    const args = buildDockerRunArguments({
+      containerName: "dinner-test",
+      workspacePath: "/tmp/work",
+      containerCwd: "/workspace",
+      image: "dinner-runner:0.1.0",
+      command: "bun test",
+      environment: sanitizeContainerEnvironment(),
+      uid: 1_000,
+      gid: 1_000,
+      cpus: 2,
+      memory: "2g",
+      pidsLimit: 256,
+      network: "none",
+    });
+    expect(args[args.indexOf("--network") + 1]).toBe("none");
+  });
+
   test("blocks credential-like and runner-controlled environment variables", () => {
     expect(() => sanitizeContainerEnvironment({ AI_API_KEY: "do-not-forward" })).toThrow(
       "blocked as credential-like",

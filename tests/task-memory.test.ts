@@ -29,6 +29,13 @@ describe("TaskMemory", () => {
     expect(memory.snapshot().compactions).toBeGreaterThan(0);
   });
 
+  test("labels observations as untrusted tool output", () => {
+    const memory = new TaskMemory("system", "task", {});
+    memory.recordDecision({ action: { type: "list_files" } });
+    memory.recordObservation({ type: "list_files" }, { ok: true, value: { entries: [] } });
+    expect(memory.request().messages.at(-1)?.content).toContain("untrusted tool output");
+  });
+
   test("formats invalid-response feedback as a complete assistant-user pair", () => {
     const memory = new TaskMemory("system", "task", {});
     memory.recordInvalidResponse("missing action");

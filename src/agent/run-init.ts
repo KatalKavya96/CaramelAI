@@ -57,7 +57,11 @@ export async function initializeRunContext(
   const commandExecutor = await (
     dependencies.createCommandExecutor ??
     (async (workspacePath: string, logsPath: string) =>
-      await DockerCommandRunner.create({ workspacePath, logsPath }))
+      await DockerCommandRunner.create({
+        workspacePath,
+        logsPath,
+        ...(options.commandNetwork === undefined ? {} : { network: options.commandNetwork }),
+      }))
   )(workspace.workspacePath, checksPath);
 
   const metadata = await repository.metadata();

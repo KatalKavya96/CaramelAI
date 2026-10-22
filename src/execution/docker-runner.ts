@@ -16,8 +16,12 @@ export interface DockerRunnerOptions {
   cpus?: number;
   memory?: string;
   pidsLimit?: number;
+  /** "bridge" allows package installs; "none" blocks all network access, including exfiltration. */
+  network?: CommandNetwork;
   readOnlyMounts?: readonly { hostPath: string; containerPath: string }[];
 }
+
+export type CommandNetwork = "bridge" | "none";
 
 interface DockerRunnerDependencies {
   backend?: DockerBackend;
@@ -38,6 +42,7 @@ interface NormalizedDockerRunnerOptions {
   cpus: number;
   memory: string;
   pidsLimit: number;
+  network: CommandNetwork;
   readOnlyMounts: readonly { hostPath: string; containerPath: string }[];
 }
 
@@ -143,6 +148,7 @@ export function buildDockerRunArguments(options: {
   cpus: number;
   memory: string;
   pidsLimit: number;
+  network?: CommandNetwork;
   readOnlyMounts?: readonly { hostPath: string; containerPath: string }[];
 }): string[] {
   const args = [
@@ -152,7 +158,7 @@ export function buildDockerRunArguments(options: {
     "--name",
     options.containerName,
     "--network",
-    "bridge",
+    options.network ?? "bridge",
     "--read-only",
     "--tmpfs",
     "/tmp:rw,nosuid,nodev,size=512m",
@@ -286,6 +292,7 @@ export class DockerCommandRunner {
         cpus: positiveNumber(options.cpus ?? DEFAULT_OPTIONS.cpus, "cpus"),
         memory: options.memory ?? DEFAULT_OPTIONS.memory,
         pidsLimit: positiveInteger(options.pidsLimit ?? DEFAULT_OPTIONS.pidsLimit, "pidsLimit"),
+        network: options.network ?? "bridge",
         readOnlyMounts,
       },
       dependencies.backend ?? new DockerCliBackend(),
@@ -318,6 +325,7 @@ export class DockerCommandRunner {
         cpus: this.options.cpus,
         memory: this.options.memory,
         pidsLimit: this.options.pidsLimit,
+        network: this.options.network,
         readOnlyMounts: this.options.readOnlyMounts,
       });
       const process = this.backend.run(args);
