@@ -52,6 +52,30 @@ export function evaluateFinishDecision(
   return { status, terminationReason };
 }
 
+/** How many times an incomplete finish is sent back before it is accepted as partial. */
+export const MAX_FINISH_REJECTIONS = 2;
+
+/** Concrete steps the model can still take to make a finish verifiable. */
+export function missingFinishRequirements(state: {
+  changedFiles: number;
+  fingerprint: string;
+  verifiedPatchSha: string | null;
+  diffReviewedPatchSha: string | null;
+  trustedCommands: readonly string[];
+}): string[] {
+  if (state.changedFiles === 0) return [];
+  const missing: string[] = [];
+  if (state.diffReviewedPatchSha !== state.fingerprint) {
+    missing.push("Review the final changes with inspect_diff.");
+  }
+  if (state.verifiedPatchSha !== state.fingerprint && state.trustedCommands.length > 0) {
+    missing.push(
+      `Run a trusted verification command on the final code and make it pass: ${state.trustedCommands.join(", ")}.`,
+    );
+  }
+  return missing;
+}
+
 export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRunResult> {
   const { context } = options;
   const { workspace, events } = context;
