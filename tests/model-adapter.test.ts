@@ -151,3 +151,27 @@ describe("FakeModelAdapter", () => {
     await expect(fake.complete(REQUEST)).rejects.toBeInstanceOf(ModelError);
   });
 });
+
+describe("StructuredModelAdapter cancellation", () => {
+  test("aborts the in-flight request and does not retry", async () => {
+    let calls = 0;
+    let transportSignal: AbortSignal | undefined;
+    const hanging: ModelTransport = {
+      send: (_request, signal) => {
+        calls += 1;
+        transportSignal = signal;
+        return new Promise(() => {});
+      },
+    };
+    const adapter = new StructuredModelAdapter(hanging, { requestTimeoutMs: 60_000, maxAttempts: 3 });
+    const cancellation = new AbortController();
+    setTimeout(() => cancellation.abort(), 5);
+
+    const error = await adapter.complete(REQUEST, { signal: cancellation.signal }).catch((caught) => caught);
+    expect(error).toBeInstanceOf(ModelError);
+    expect(error.kind).toBe("cancelled");
+    expect(error.retryable).toBeFalse();
+    expect(calls).toBe(1);
+    expect(transportSignal?.aborted).toBeTrue();
+  });
+});

@@ -126,6 +126,8 @@ async function runWithScript(options: {
   verificationReserveSteps?: number;
   maxStagnationInterventions?: number;
   repositoryMapEnabled?: boolean;
+  signal?: AbortSignal;
+  createCommandExecutor?: (workspacePath: string, logsPath: string) => Promise<CommandExecutor>;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
   const outputPath = join(parent, "run");
@@ -147,8 +149,9 @@ async function runWithScript(options: {
     {
       model,
       runId: "test-run",
-      createCommandExecutor: async (workspacePath, logsPath) =>
-        new LocalCommandExecutor(workspacePath, logsPath),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      createCommandExecutor: options.createCommandExecutor ?? (async (workspacePath, logsPath) =>
+        new LocalCommandExecutor(workspacePath, logsPath)),
     },
   );
   return { result, model };
@@ -681,5 +684,34 @@ describe("autonomous agent vertical slice", () => {
       script: [turn({ type: "finish", summary: "Map inspected." })],
     });
     expect(model.requests[0]?.messages[1]?.content).toContain('"path":"src/math.ts"');
+  });
+
+  test("a cancelled run stops at the next safe point and still writes its report", async () => {
+    const source = await codingFixture();
+    const cancellation = new AbortController();
+    const { result, model } = await runWithScript({
+      source,
+      signal: cancellation.signal,
+      script: [
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+      ],
+      createCommandExecutor: async (workspacePath, logsPath) => {
+        const local = new LocalCommandExecutor(workspacePath, logsPath);
+        return {
+          async run(request) {
+            // The user presses Ctrl+C while the command is running.
+            cancellation.abort();
+            expect(request.signal?.aborted).toBeTrue();
+            return await local.run(request);
+          },
+        };
+      },
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.terminationReason).toContain("cancelled");
+    expect(model.requests).toHaveLength(1);
+    expect(JSON.parse(await readFile(result.resultPath, "utf8")).status).toBe("cancelled");
   });
 });

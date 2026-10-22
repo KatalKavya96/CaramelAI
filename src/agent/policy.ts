@@ -33,6 +33,8 @@ export interface AutonomousRunDependencies {
   onEvent?: (event: AgentEvent) => void;
   now?: () => number;
   runId?: string;
+  /** Aborting stops the run at the next safe point; the in-flight model call or command is cancelled. */
+  signal?: AbortSignal;
 }
 
 export interface ValidatedRunBudgets {
@@ -111,5 +113,6 @@ export function explorationRejection(
 export function statusForModelError(error: ModelError): AgentStatus {
   if (error.kind === "authentication") return "blocked";
   if (error.kind === "budget_exhausted") return "budget_exhausted";
+  if (error.kind === "cancelled") return "cancelled";
   return "failed";
 }

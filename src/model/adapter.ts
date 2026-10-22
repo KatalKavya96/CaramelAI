@@ -13,7 +13,8 @@ export type ModelErrorKind =
   | "timeout"
   | "transport"
   | "invalid_response"
-  | "budget_exhausted";
+  | "budget_exhausted"
+  | "cancelled";
 
 export class ModelError extends Error {
   constructor(
@@ -74,6 +75,10 @@ function nonNegativeInteger(value: number, name: string): number {
     throw new Error(`${name} must be a non-negative integer.`);
   }
   return value;
+}
+
+function cancelledError(attempts: number): ModelError {
+  return new ModelError("cancelled", "Model request was cancelled.", false, attempts);
 }
 
 function errorFromTransport(error: unknown, attempts: number): ModelError {
@@ -175,6 +180,7 @@ export class StructuredModelAdapter implements ModelAdapter {
     let lastError: ModelError | undefined;
 
     for (let attempt = 1; attempt <= this.options.maxAttempts; attempt += 1) {
+      if (budget.signal?.aborted === true) throw cancelledError(attempt - 1);
       const remainingMs = this.remainingBudget(startedAt, budget.remainingTimeMs);
       if (remainingMs !== undefined && remainingMs <= 0) {
         throw new ModelError(
@@ -191,7 +197,7 @@ export class StructuredModelAdapter implements ModelAdapter {
       );
 
       try {
-        const response = await this.sendWithTimeout(request, timeoutMs, attempt);
+        const response = await this.sendWithTimeout(request, timeoutMs, attempt, budget.signal);
         return parse(response, attempt);
       } catch (error) {
         const modelError = errorFromTransport(error, attempt);
@@ -228,9 +234,19 @@ export class StructuredModelAdapter implements ModelAdapter {
     request: ModelRequest,
     timeoutMs: number,
     attempt: number,
+    signal?: AbortSignal,
   ): Promise<unknown> {
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_, reject) => {
+      if (signal === undefined) return;
+      onAbort = () => {
+        controller.abort();
+        reject(cancelledError(attempt));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeout = setTimeout(() => {
         controller.abort();
@@ -246,9 +262,10 @@ export class StructuredModelAdapter implements ModelAdapter {
     });
 
     try {
-      return await Promise.race([this.transport.send(request, controller.signal), timeoutPromise]);
+      return await Promise.race([this.transport.send(request, controller.signal), timeoutPromise, cancelled]);
     } finally {
       if (timeout !== undefined) clearTimeout(timeout);
+      if (onAbort !== undefined) signal?.removeEventListener("abort", onAbort);
     }
   }
 }

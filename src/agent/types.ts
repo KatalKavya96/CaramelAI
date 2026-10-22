@@ -23,7 +23,7 @@ export interface AgentPlan {
   answers: PlanAnswer[];
 }
 
-export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed";
+export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed" | "cancelled";
 
 export type AgentEventType =
   | "run_started"

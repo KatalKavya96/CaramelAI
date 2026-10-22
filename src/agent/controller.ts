@@ -62,6 +62,11 @@ export async function runAutonomousTask(
     // Workspace state is computed once per action and carried forward: only actions change it.
     let lastState = await currentState(workspace);
     while (true) {
+      if (dependencies.signal?.aborted === true) {
+        status = "cancelled";
+        terminationReason = "Run cancelled by the user.";
+        break;
+      }
       const remainingTimeMs = deadline - now();
       if (remainingTimeMs <= 0 || steps >= options.maxSteps || modelCalls >= options.maxModelCalls) {
         status = "budget_exhausted";
@@ -95,6 +100,7 @@ export async function runAutonomousTask(
           failures,
           maxModelCalls: options.maxModelCalls,
           remainingTimeMs,
+          signal: dependencies.signal,
         },
         { modelCalls, consecutiveInvalidResponses },
       );
@@ -183,6 +189,7 @@ export async function runAutonomousTask(
           memory,
           remainingTimeMs: Math.max(1, deadline - now()),
           before: lastState,
+          signal: dependencies.signal,
         });
         lastState = observation.state;
 

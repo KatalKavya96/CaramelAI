@@ -290,3 +290,41 @@ describe("DockerCommandRunner", () => {
     ).rejects.toThrow("outside the target workspace");
   });
 });
+
+describe("Docker command cancellation", () => {
+  test("removes the container and reports a runner error when the run is cancelled", async () => {
+    const workspace = await temporaryDirectory("dinner-cancel-workspace-");
+    const logs = await temporaryDirectory("dinner-cancel-logs-");
+    const backend = new FakeDockerBackend({ neverExit: true });
+    const commandRunner = await runner(workspace, logs, backend);
+    const cancellation = new AbortController();
+    setTimeout(() => cancellation.abort(), 5);
+
+    const result = await commandRunner.run({
+      command: "sleep 600",
+      purpose: "agent",
+      timeoutMs: 1_000,
+      signal: cancellation.signal,
+    });
+
+    expect(result.status).toBe("runner_error");
+    expect(result.error).toBe("Command cancelled.");
+    expect(backend.removedContainers).toEqual(["dinner-command-1"]);
+    expect(backend.killed).toBeTrue();
+  });
+
+  test("never starts a container once the run is already cancelled", async () => {
+    const workspace = await temporaryDirectory("dinner-cancel-workspace-");
+    const logs = await temporaryDirectory("dinner-cancel-logs-");
+    const backend = new FakeDockerBackend();
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const result = await (await runner(workspace, logs, backend)).run({
+      command: "bun test",
+      purpose: "agent",
+      signal: cancellation.signal,
+    });
+    expect(result.error).toBe("Command cancelled.");
+    expect(backend.runArguments).toBeUndefined();
+  });
+});

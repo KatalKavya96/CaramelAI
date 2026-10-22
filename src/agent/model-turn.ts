@@ -15,6 +15,7 @@ export interface ModelTurnContext {
   failures: FailureRecord[];
   maxModelCalls: number;
   remainingTimeMs: number;
+  signal?: AbortSignal | undefined;
 }
 
 export type ModelTurnResult =
@@ -32,7 +33,10 @@ export async function executeModelTurn(
   const { model, memory, codeFingerprint, events, usage, failures, maxModelCalls, remainingTimeMs } = ctx;
 
   try {
-    const turn = await model.complete(memory.request(), { remainingTimeMs });
+    const turn = await model.complete(memory.request(), {
+      remainingTimeMs,
+      ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+    });
     recordUsage(usage, turn.usage);
     await events.write("model_decision", turn.decision);
     memory.recordDecision(turn.decision);

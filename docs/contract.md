@@ -46,6 +46,7 @@ Statuses:
 - `blocked`: an external prerequisite prevents meaningful progress.
 - `budget_exhausted`: a configured step, call, time, or token limit ended the run.
 - `failed`: the harness itself could not complete the run.
+- `cancelled`: the user stopped the run (Ctrl+C). The in-flight command container is removed and the report is still written. Exit code 130.
 
 An independent benchmark runner decides whether a task is `solved`; the agent cannot assign that label to itself.
 

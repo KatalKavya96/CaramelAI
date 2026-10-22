@@ -150,7 +150,7 @@ Every initialized run keeps its artifacts outside the target repository:
 - `report.md`: reviewer-facing evidence, missing/stale checks, failures, and artifact paths.
 - `checks/`: complete stdout and stderr logs for commands.
 
-`verified` means the available final-state checks passed; independent hidden evaluation may still reject the patch. Other honest outcomes are `partial`, `blocked`, `budget_exhausted`, and `failed`.
+`verified` means the available final-state checks passed; independent hidden evaluation may still reject the patch. Other honest outcomes are `partial`, `blocked`, `budget_exhausted`, `failed`, and `cancelled` (Ctrl+C stops the run cleanly; a second Ctrl+C exits at once).
 
 ## Development checks
 
