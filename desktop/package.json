@@ -1,0 +1,14 @@
+{
+  "name": "caramel-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "backend": "bun run scripts/build-backend.ts",
+    "web": "cd ../web && npm run build",
+    "dev": "bun run backend && tauri dev",
+    "build": "bun run web && bun run backend && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.9.6"
+  }
+}
