@@ -1,3 +1,6 @@
+import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
+
 /** Resolves the signed-in user for a request, or null. The HTTP layer depends only on this. */
 export interface Authenticator {
   userId(request: Request): Promise<string | null>;
@@ -25,6 +28,76 @@ function randomToken(): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
 
+export interface StoredSession {
+  userId: string;
+  login: string;
+  expiresAt: number;
+}
+
+/** Where sessions live. Keyed by the browser's opaque session token. */
+export interface SessionStore {
+  get(token: string): StoredSession | null;
+  set(token: string, session: StoredSession): void;
+  delete(token: string): void;
+}
+
+export class MemorySessionStore implements SessionStore {
+  private readonly sessions = new Map<string, StoredSession>();
+  get(token: string): StoredSession | null {
+    return this.sessions.get(token) ?? null;
+  }
+  set(token: string, session: StoredSession): void {
+    this.sessions.set(token, session);
+  }
+  delete(token: string): void {
+    this.sessions.delete(token);
+  }
+}
+
+/**
+ * Sessions in SQLite, so a restart does not sign everyone out. Rows are keyed by a SHA-256 of
+ * the token: someone who copies the database file still cannot present a valid cookie.
+ */
+export class SqliteSessionStore implements SessionStore {
+  private readonly db: Database;
+
+  constructor(path: string, now: () => number = Date.now) {
+    this.db = new Database(path, { create: true });
+    this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, login TEXT NOT NULL, expires_at INTEGER NOT NULL)",
+    );
+    this.db.query("DELETE FROM sessions WHERE expires_at <= ?").run(now());
+  }
+
+  private static hash(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  get(token: string): StoredSession | null {
+    const row = this.db
+      .query<{ user_id: string; login: string; expires_at: number }, [string]>(
+        "SELECT user_id, login, expires_at FROM sessions WHERE token_hash = ?",
+      )
+      .get(SqliteSessionStore.hash(token));
+    return row === null ? null : { userId: row.user_id, login: row.login, expiresAt: row.expires_at };
+  }
+
+  set(token: string, session: StoredSession): void {
+    this.db
+      .query("INSERT OR REPLACE INTO sessions (token_hash, user_id, login, expires_at) VALUES (?, ?, ?, ?)")
+      .run(SqliteSessionStore.hash(token), session.userId, session.login, session.expiresAt);
+  }
+
+  delete(token: string): void {
+    this.db.query("DELETE FROM sessions WHERE token_hash = ?").run(SqliteSessionStore.hash(token));
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
+
 export interface GitHubAuthOptions {
   clientId: string;
   clientSecret: string;
@@ -32,6 +105,8 @@ export interface GitHubAuthOptions {
   publicOrigin: string;
   fetch?: typeof fetch;
   now?: () => number;
+  /** Defaults to memory, which signs everyone out on restart. */
+  sessions?: SessionStore;
 }
 
 /**
@@ -39,13 +114,14 @@ export interface GitHubAuthOptions {
  * the user's id and then dropped: the server stores only an opaque session id per browser.
  */
 export class GitHubAuth implements Authenticator {
-  private readonly sessions = new Map<string, { userId: string; login: string; expiresAt: number }>();
+  private readonly sessions: SessionStore;
   private readonly fetch: typeof fetch;
   private readonly now: () => number;
 
   constructor(private readonly options: GitHubAuthOptions) {
     this.fetch = options.fetch ?? fetch;
     this.now = options.now ?? Date.now;
+    this.sessions = options.sessions ?? new MemorySessionStore();
   }
 
   private get secure(): boolean {
@@ -60,7 +136,7 @@ export class GitHubAuth implements Authenticator {
     const id = cookie(request, SESSION_COOKIE);
     if (id === null) return null;
     const session = this.sessions.get(id);
-    if (session === undefined || session.expiresAt <= this.now()) {
+    if (session === null || session.expiresAt <= this.now()) {
       this.sessions.delete(id);
       return null;
     }

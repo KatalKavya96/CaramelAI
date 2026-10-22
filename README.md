@@ -153,7 +153,7 @@ The example finishes as `partial` because it neither changes code nor executes a
 | `CARAMEL_MAX_CONCURRENT_RUNS`, `CARAMEL_MAX_ACTIVE_RUNS_PER_USER` | Queue limits (defaults 2 and 1). |
 | `CARAMEL_WEB_DIST` | Built web UI to serve (default `web/dist`). Other paths fall back to its `index.html`. |
 
-Shared-server rules: repositories only as `https://github.com/...` URLs, never host paths; commands run with `--network none` (so v1 supports repositories whose tests run without installing packages); each user brings their own provider key; budgets are capped at 120 steps, 30 minutes and 80 model calls. Sessions are kept in memory, so a restart signs everyone out and marks active runs failed.
+Shared-server rules: repositories only as `https://github.com/...` URLs, never host paths; commands run with `--network none` (so v1 supports repositories whose tests run without installing packages); each user brings their own provider key; budgets are capped at 120 steps, 30 minutes and 80 model calls. Sessions are stored in `sessions.db` (SQLite, token hashes only), so a restart keeps people signed in; it still marks active runs failed.
 
 Routes (all under `/api`, JSON, session cookie): `GET/POST runs`, `GET runs/:id`, `POST runs/:id/cancel`, `GET runs/:id/events` (Server-Sent Events, resumable with `Last-Event-ID`), `GET runs/:id/patch`, `GET runs/:id/result` (status, verification evidence, metrics and usage without host paths; `404 not_ready` until the run ends), `GET providers`, `PUT/DELETE providers/:provider/key`, `POST providers/:provider/test`, `GET me`. A follow-up run is `POST runs` with `{parentRunId, task}`.
 

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "../model";
 import { KeyStore, RunService, SHARED_SERVER_POLICY } from "../service";
 import { createApp } from "./app";
-import { GitHubAuth } from "./auth";
+import { GitHubAuth, SqliteSessionStore } from "./auth";
 
 function required(name: string): string {
   const value = Bun.env[name]?.trim();
@@ -25,6 +25,7 @@ const auth = new GitHubAuth({
   clientId: required("GITHUB_CLIENT_ID"),
   clientSecret: required("GITHUB_CLIENT_SECRET"),
   publicOrigin,
+  sessions: new SqliteSessionStore(resolve(dataDir, "sessions.db")),
 });
 const service = await RunService.open({
   runsRoot,
