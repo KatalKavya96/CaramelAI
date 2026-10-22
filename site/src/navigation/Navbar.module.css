@@ -1,0 +1,8 @@
+/* Scribecode's floating CardNav composition, using Caramel's theme tokens. */
+.header { pointer-events:none; position:fixed; top:12px; left:0; right:0; z-index:40; }
+.container { pointer-events:auto; display:flex; align-items:flex-start; gap:8px; max-width:800px; width:100%; padding:0 20px; margin:0 auto; }
+.container > div { min-width:0; flex:1; }
+.logo { display:inline-flex; align-items:center; gap:7px; font-family:var(--font-brand); font-size:22px; font-weight:700; letter-spacing:-.7px; }
+.theme { display:grid; place-items:center; flex-shrink:0; width:40px; height:40px; margin-top:6px; color:var(--text-muted); background:var(--site-window); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow-sm); backdrop-filter:blur(20px); transition:background 160ms,color 160ms; }
+.theme:hover { background:var(--surface-raised); color:var(--text); }
+@media(max-width:600px){.container{padding:0 12px}.logo{font-size:21px}}
