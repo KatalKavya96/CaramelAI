@@ -13,6 +13,11 @@ export interface AutonomousRunOptions {
   verificationReserveSteps?: number;
   maxStagnationInterventions?: number;
   repositoryMapEnabled?: boolean;
+  /**
+   * Commands the completion gate accepts as verification. When omitted, checks discovered from
+   * the repository's manifests are used. The model can run other commands but they never verify.
+   */
+  verificationCommands?: readonly string[];
   apiKey?: string;
 }
 
@@ -59,6 +64,9 @@ export function validateRunOptions(options: AutonomousRunOptions): ValidatedRunB
     verificationReserveSteps >= options.maxSteps
   ) {
     throw new Error("verificationReserveSteps must be a non-negative integer smaller than maxSteps.");
+  }
+  if (options.verificationCommands?.some((command) => command.trim() === "") === true) {
+    throw new Error("verificationCommands must not contain empty commands.");
   }
   const maxStagnationInterventions = options.maxStagnationInterventions ?? 2;
   if (!Number.isInteger(maxStagnationInterventions) || maxStagnationInterventions <= 0) {

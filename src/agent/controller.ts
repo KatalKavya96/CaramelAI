@@ -177,6 +177,7 @@ export async function runAutonomousTask(
           events,
           failures,
           verificationEvidence,
+          trustedChecks: ctx.trustedChecks,
           maxStagnationInterventions: budgets.maxStagnationInterventions,
           maxRepairAttempts: budgets.maxRepairAttempts,
         },

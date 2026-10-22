@@ -28,6 +28,8 @@ export interface RunConfig {
   modelScriptPath?: string;
   planMode: boolean;
   repositoryMapEnabled: boolean;
+  /** Overrides the discovered checks that the completion gate trusts. */
+  verificationCommands?: string[];
   colorEnabled: boolean;
   budgets: {
     maxSteps: number;
@@ -71,6 +73,7 @@ interface RunArguments {
   repositoryMap?: string;
   plan?: string;
   color?: string;
+  verify?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -102,6 +105,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--repository-map", "repositoryMap"],
   ["--plan", "plan"],
   ["--color", "color"],
+  ["--verify", "verify"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -311,6 +315,10 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   };
   if (config.budgets.verificationReserveSteps >= config.budgets.maxSteps) {
     throw new ConfigurationError("--verification-reserve-steps must be smaller than --max-steps.");
+  }
+  if (args.verify !== undefined) {
+    if (args.verify.trim() === "") throw new ConfigurationError("--verify must not be empty.");
+    config.verificationCommands = [args.verify.trim()];
   }
   if (apiKey !== undefined && apiKey !== "") config.apiKey = apiKey;
   if (args.modelScript !== undefined) config.modelScriptPath = resolve(cwd, args.modelScript);

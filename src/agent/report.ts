@@ -35,7 +35,7 @@ export function renderEvidenceReport(result: AgentRunResult, finalFingerprint: s
     ...(result.verification.evidence.length === 0
       ? ["No verification commands were recorded."]
       : result.verification.evidence.map((evidence) =>
-          `- **${evidence.status}** \`${evidence.command}\` in \`${evidence.cwd}\` (${evidence.durationMs} ms, fingerprint \`${evidence.codeFingerprint}\`)`,
+          `- **${evidence.status}**${evidence.trusted ? "" : " (untrusted, not counted)"} \`${evidence.command}\` in \`${evidence.cwd}\` (${evidence.durationMs} ms, fingerprint \`${evidence.codeFingerprint}\`)`,
         )),
     "",
     "## Usage",

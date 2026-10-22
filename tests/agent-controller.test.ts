@@ -293,6 +293,70 @@ describe("autonomous agent vertical slice", () => {
     });
   });
 
+  test("does not accept an arbitrary command labelled as verification", async () => {
+    const source = await codingFixture();
+    const wrongFix = FIX_PATCH.replace("+  return a + b;", "+  return a * b;");
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "apply_patch", patch: wrongFix }, "wrong fix"),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "run_command", command: "true", purpose: "verification" }),
+        turn({ type: "finish", summary: "Verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.verification.successfulFinalState).toBeFalse();
+    expect(result.verification.evidence[0]).toMatchObject({ status: "passed", trusted: false });
+  });
+
+  test("does not trust a script alias after the agent edits the manifest that defines it", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "replace_text", path: "package.json", search: '"test":"bun test"', replacement: '"test":"exit 0"' }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "run_command", command: "bun run test", purpose: "verification" }),
+        turn({ type: "finish", summary: "Verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.verification.evidence[0]).toMatchObject({ status: "passed", trusted: false });
+  });
+
+  test("accepts only the configured verification command when one is supplied", async () => {
+    const source = await codingFixture();
+    const parent = await temporaryDirectory("dinner-agent-output-");
+    const result = await runAutonomousTask(
+      {
+        repoPath: source,
+        outputPath: join(parent, "run"),
+        task: "Fix add.",
+        maxSteps: 10,
+        maxMinutes: 2,
+        maxModelCalls: 10,
+        verificationCommands: ["bun test tests/math.test.ts"],
+      },
+      {
+        model: new FakeModelAdapter([
+          turn({ type: "apply_patch", patch: FIX_PATCH }),
+          turn({ type: "inspect_diff" }),
+          turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+          turn({ type: "run_command", command: "bun test tests/math.test.ts", purpose: "verification" }),
+          turn({ type: "finish", summary: "Verified." }),
+        ]),
+        runId: "test-run",
+        createCommandExecutor: async (workspacePath, logsPath) => new LocalCommandExecutor(workspacePath, logsPath),
+      },
+    );
+
+    expect(result.status).toBe("verified");
+    expect(result.verification.evidence.map((evidence) => evidence.trusted)).toEqual([false, true]);
+  });
+
   test("invalidates successful verification after a later edit", async () => {
     const source = await codingFixture();
     const secondPatch = FIX_PATCH.replace("-  return a - b;", "-  return a + b;").replace(

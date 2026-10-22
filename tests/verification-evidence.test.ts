@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createEvidence, parseTestCounts, verificationStatus } from "../src/verification";
+import { createEvidence, discoverChecks, isTrustedVerification, parseTestCounts, verificationStatus } from "../src/verification";
+import type { RepositoryMetadata } from "../src/tools";
 import type { CommandResult } from "../src/execution";
 
 function result(overrides: Partial<CommandResult> = {}): CommandResult {
@@ -25,5 +26,30 @@ describe("verification evidence", () => {
     expect(verificationStatus(result({ status: "runner_error", exitCode: null }), null)).toBe("unknown");
     expect(verificationStatus(result(), { passed: 0, failed: 0, skipped: 2, total: 2 })).toBe("skipped");
     expect(verificationStatus(result(), { passed: 0, failed: 0, skipped: 0, total: 0 })).toBe("unknown");
+  });
+
+  test("discovers package script commands and marks aliases as defined by the manifest", () => {
+    const metadata = { manifests: ["package.json", "bun.lock"], testConfigs: [] } as unknown as RepositoryMetadata;
+    const checks = discoverChecks(metadata, { packageJson: { scripts: { test: "bun test ./test" } } });
+    expect(checks).toContainEqual({ command: "bun test ./test", source: "package.json scripts.test", category: "test" });
+    expect(checks).toContainEqual({ command: "bun run test", source: "package.json scripts.test", category: "test", definedBy: "package.json" });
+    expect(checks.some((check) => check.command === "true")).toBeFalse();
+  });
+
+  test("discovers Cargo and Go checks", () => {
+    const metadata = { manifests: ["Cargo.toml", "go.mod"], testConfigs: [] } as unknown as RepositoryMetadata;
+    expect(discoverChecks(metadata).map((check) => check.command)).toEqual(["cargo test", "go test ./..."]);
+  });
+
+  test("trusts only listed commands in the workspace root whose definition is unchanged", () => {
+    const trusted = [
+      { command: "bun test", source: "package.json scripts.test", category: "test" as const },
+      { command: "npm test", source: "package.json scripts.test", category: "test" as const, definedBy: "package.json" },
+    ];
+    expect(isTrustedVerification({ command: "  bun   test ", cwd: "." }, trusted, [])).toBeTrue();
+    expect(isTrustedVerification({ command: "true", cwd: "." }, trusted, [])).toBeFalse();
+    expect(isTrustedVerification({ command: "bun test", cwd: "src" }, trusted, [])).toBeFalse();
+    expect(isTrustedVerification({ command: "npm test", cwd: "." }, trusted, [])).toBeTrue();
+    expect(isTrustedVerification({ command: "npm test", cwd: "." }, trusted, ["package.json"])).toBeFalse();
   });
 });
