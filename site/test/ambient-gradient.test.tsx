@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AmbientGradient } from "../src/experience/AmbientGradient";
 
 const putImageData = vi.fn();
-const requestFrame = vi.fn(() => 42);
+const requestFrame = vi.fn((_callback: FrameRequestCallback) => 42);
 const cancelFrame = vi.fn();
 let intersect: (entries: { isIntersecting: boolean }[]) => void;
 let mediaChange: () => void;
@@ -62,4 +62,20 @@ it("repaints the field with the selected theme", () => {
   const dark = putImageData.mock.calls[1]![0].data[0];
   expect(light).toBeGreaterThan(200);
   expect(dark).toBeLessThan(80);
+});
+
+it.each(["light","dark"] as const)("visibly changes the %s field within six seconds", (theme) => {
+  render(<AmbientGradient theme={theme} reducedMotion={false} className="mesh" />);
+  const initial = new Uint8ClampedArray(putImageData.mock.calls[0]![0].data);
+  const start = performance.now();
+  for (let step = 1; step <= 120; step++) {
+    const callback = requestFrame.mock.calls.at(-1)![0];
+    act(() => callback(start + step * 50));
+  }
+  const current = putImageData.mock.calls.at(-1)![0].data as Uint8ClampedArray;
+  let difference = 0;
+  for (let i = 0; i < current.length; i++) {
+    if (i % 4 !== 3) difference += Math.abs(current[i]! - initial[i]!);
+  }
+  expect(difference / (current.length * .75)).toBeGreaterThan(.5);
 });
