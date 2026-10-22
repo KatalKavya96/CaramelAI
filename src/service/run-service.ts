@@ -106,6 +106,7 @@ export class RunService {
   private readonly live = new Map<string, LiveRun>();
   private readonly queue: string[] = [];
   private running = 0;
+  private readonly executing = new Set<Promise<void>>();
   private readonly now: () => Date;
 
   private constructor(private readonly options: RunServiceOptions) {
@@ -177,6 +178,13 @@ export class RunService {
   list(ownerId: string): RunView[] {
     return this.newestFirst([...this.records.values()].filter((run) => run.ownerId === ownerId))
       .map((run) => this.view(run));
+  }
+
+  /** Stops taking work, cancels every queued and running run, and waits for them to settle. */
+  async close(): Promise<void> {
+    this.queue.splice(0);
+    for (const live of this.live.values()) live.controller.abort();
+    await Promise.all(this.executing);
   }
 
   async cancel(ownerId: string, id: string): Promise<RunView> {
@@ -303,11 +311,16 @@ export class RunService {
       const id = this.queue.shift()!;
       const record = this.records.get(id)!;
       this.running += 1;
-      void this.execute(record).finally(() => {
-        this.running -= 1;
-        this.live.delete(id);
-        this.pump();
-      });
+      const execution = this.execute(record)
+        // execute() handles run failures itself; this only catches a failed final write of run.json.
+        .catch((error: unknown) => console.error(`run ${id}: could not record its final state`, error))
+        .finally(() => {
+          this.executing.delete(execution);
+          this.running -= 1;
+          this.live.delete(id);
+          this.pump();
+        });
+      this.executing.add(execution);
     }
   }
 
