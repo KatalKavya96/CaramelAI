@@ -1,5 +1,5 @@
 import { appendFile, writeFile } from "node:fs/promises";
-import type { AgentEvent, AgentEventType } from "./types";
+import { AGENT_EVENT_SCHEMA_VERSION, type AgentEvent, type AgentEventPayloads, type AgentEventType } from "./types";
 
 function redact(value: unknown, secrets: readonly string[]): unknown {
   if (typeof value === "string") {
@@ -35,13 +35,15 @@ export class AgentEventWriter {
     return new AgentEventWriter(options.path, options.secrets ?? [], options.onEvent);
   }
 
-  async write(type: AgentEventType, payload: unknown): Promise<AgentEvent> {
-    const event: AgentEvent = {
+  async write<K extends AgentEventType>(type: K, payload: AgentEventPayloads[K]): Promise<AgentEvent> {
+    // Redaction only replaces strings inside the payload, so its shape is unchanged.
+    const event = {
+      schemaVersion: AGENT_EVENT_SCHEMA_VERSION,
       sequence: ++this.sequence,
       timestamp: new Date().toISOString(),
       type,
-      payload: redact(payload, this.secrets),
-    };
+      payload: redact(payload, this.secrets) as AgentEventPayloads[K],
+    } as AgentEvent;
     await appendFile(this.path, `${JSON.stringify(event)}\n`);
     try {
       this.onEvent?.(event);

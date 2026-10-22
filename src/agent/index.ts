@@ -13,3 +13,5 @@ export * from "./events";
 export * from "./progress";
 export * from "./fake-script";
 export type * from "./types";
+export * from "./run-state";
+export { AGENT_EVENT_SCHEMA_VERSION } from "./types";
