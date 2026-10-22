@@ -98,4 +98,20 @@ describe("OpenRouter rate limits", () => {
     expect(error.kind).toBe("rate_limit");
     expect(error.retryAfterMs).toBe(4_000);
   });
+
+  test("passes through the cost and cache hits OpenRouter reports", async () => {
+    const model = createOpenRouterModel({
+      apiKey: "not-forwarded",
+      client: {
+        chat: {
+          send: async () => ({
+            choices: [{ message: { content: JSON.stringify({ action: { type: "inspect_diff" } }) } }],
+            usage: { promptTokens: 1000, completionTokens: 50, totalTokens: 1050, cost: 0.0021, promptTokensDetails: { cachedTokens: 800 } },
+          }),
+        },
+      },
+    });
+    const turn = await model.complete({ messages: [{ role: "user", content: "Inspect it" }] });
+    expect(turn.usage).toEqual({ source: "provider", inputTokens: 1000, outputTokens: 50, totalTokens: 1050, cachedInputTokens: 800, costUsd: 0.0021 });
+  });
 });

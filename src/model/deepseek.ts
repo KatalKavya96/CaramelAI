@@ -62,14 +62,14 @@ export class DeepSeekTransport implements ModelTransport {
       }
       const result = response as {
         choices: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; prompt_cache_hit_tokens?: number };
       };
       const promptTokens = result.usage?.prompt_tokens;
       const completionTokens = result.usage?.completion_tokens;
       const totalTokens = result.usage?.total_tokens;
       const usage = promptTokens === undefined || completionTokens === undefined || totalTokens === undefined
         ? undefined
-        : { inputTokens: promptTokens, outputTokens: completionTokens, totalTokens };
+        : { inputTokens: promptTokens, outputTokens: completionTokens, totalTokens, cachedInputTokens: result.usage?.prompt_cache_hit_tokens };
       const message = result.choices[0]?.message;
       const content = message?.content;
       return { output: textContent(content), usage };

@@ -32,10 +32,13 @@ export async function executeModelTurn(
 ): Promise<ModelTurnResult> {
   const { model, memory, codeFingerprint, events, usage, failures, maxModelCalls, remainingTimeMs } = ctx;
 
+  const startedAt = performance.now();
   try {
     const turn = await model.complete(memory.request(), {
       remainingTimeMs,
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+    }).finally(() => {
+      usage.modelTimeMs += Math.round(performance.now() - startedAt);
     });
     recordUsage(usage, turn.usage);
     await events.write("model_decision", turn.decision);

@@ -9,7 +9,7 @@ function result(): AgentRunResult {
     recovery: { maxRepairAttempts: 4, repairAttempts: 1, failures: [{ sequence: 1, kind: "test", hypothesis: null, action: "run_command", detail: "failed", codeFingerprint: "final", countsAgainstRepairLimit: true }], checkpointsCreated: 0, checkpointsRestored: 0 },
     memory: { maxContextChars: 1000, reserveResponseChars: 100, largestRequestChars: 500, compactions: 0, recentPairs: 1, findings: 0, hypotheses: 0, failures: 1, edits: 1, checks: 1, readCacheHits: 0, readCacheMisses: 0 },
     metrics: { steps: 2, modelCalls: 3, commandsRun: 1, stagnationInterventions: 0, verificationReserveActivations: 0, durationMs: 50 },
-    usage: { providerInputTokens: 0, providerOutputTokens: 0, providerTotalTokens: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, estimatedTotalTokens: 0, unavailableCalls: 3 },
+    usage: { providerInputTokens: 0, providerOutputTokens: 0, providerTotalTokens: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, estimatedTotalTokens: 0, unavailableCalls: 3, cachedInputTokens: 0, providerCostUsd: 0, costUnknownCalls: 0, modelTimeMs: 0 },
   };
 }
 

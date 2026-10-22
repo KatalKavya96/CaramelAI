@@ -232,5 +232,16 @@ export function parseProviderUsage(value: unknown): ModelUsage {
     inputTokens: tokenCount(usage.inputTokens, "usage.inputTokens"),
     outputTokens: tokenCount(usage.outputTokens, "usage.outputTokens"),
     totalTokens: tokenCount(usage.totalTokens, "usage.totalTokens"),
+    ...(usage.cachedInputTokens === undefined || usage.cachedInputTokens === null
+      ? {}
+      : { cachedInputTokens: tokenCount(usage.cachedInputTokens, "usage.cachedInputTokens") }),
+    ...(usage.costUsd === undefined || usage.costUsd === null ? {} : { costUsd: dollars(usage.costUsd, "usage.costUsd") }),
   };
+}
+
+function dollars(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${path} must be a non-negative number.`);
+  }
+  return value;
 }

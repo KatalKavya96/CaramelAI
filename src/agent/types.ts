@@ -78,6 +78,14 @@ export interface UsageSummary {
   estimatedOutputTokens: number;
   estimatedTotalTokens: number;
   unavailableCalls: number;
+  /** Provider-reported input tokens that were cache hits. */
+  cachedInputTokens: number;
+  /** Sum of the cost providers reported. A lower bound when costUnknownCalls > 0. */
+  providerCostUsd: number;
+  /** Calls whose tokens were counted but whose cost the provider did not report. */
+  costUnknownCalls: number;
+  /** Wall time spent waiting on the model, including failed calls and retries. */
+  modelTimeMs: number;
 }
 
 export interface AgentRunResult {
@@ -127,6 +135,10 @@ export function emptyUsageSummary(): UsageSummary {
     estimatedOutputTokens: 0,
     estimatedTotalTokens: 0,
     unavailableCalls: 0,
+    cachedInputTokens: 0,
+    providerCostUsd: 0,
+    costUnknownCalls: 0,
+    modelTimeMs: 0,
   };
 }
 
@@ -139,6 +151,9 @@ export function recordUsage(summary: UsageSummary, usage: ModelUsage): void {
     summary.providerInputTokens += usage.inputTokens;
     summary.providerOutputTokens += usage.outputTokens;
     summary.providerTotalTokens += usage.totalTokens;
+    summary.cachedInputTokens += usage.cachedInputTokens ?? 0;
+    if (usage.costUsd === undefined) summary.costUnknownCalls += 1;
+    else summary.providerCostUsd += usage.costUsd;
     return;
   }
   summary.estimatedInputTokens += usage.inputTokens;
