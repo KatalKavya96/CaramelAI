@@ -98,6 +98,7 @@ export async function initializeRunContext(
       maxMinutes: options.maxMinutes,
       maxModelCalls: options.maxModelCalls,
     },
+    ...(options.parentRunId === undefined ? {} : { parentRunId: options.parentRunId }),
   });
 
   return {

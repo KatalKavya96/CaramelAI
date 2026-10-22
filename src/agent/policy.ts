@@ -22,6 +22,8 @@ export interface AutonomousRunOptions {
   /** Network for target-repository commands. Defaults to "bridge"; "none" blocks exfiltration. */
   commandNetwork?: CommandNetwork;
   apiKey?: string;
+  /** Recorded in run_started when this run is a follow-up of an earlier run. */
+  parentRunId?: string;
 }
 
 export interface AutonomousRunDependencies {

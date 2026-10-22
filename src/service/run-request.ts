@@ -32,6 +32,15 @@ export const RunRequestSchema = z.object({
   planMode: z.boolean().default(false),
 });
 
+/** Continues a finished run: repo, provider and model come from the parent. */
+export const FollowUpRequestSchema = z.object({
+  parentRunId: z.string().trim().min(1).max(100),
+  task: z.string().trim().min(1, "task must not be empty.").max(20_000),
+  budgets: RunBudgetsSchema.default({}),
+  verificationCommands: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
+});
+
+export type FollowUpRequest = z.infer<typeof FollowUpRequestSchema>;
 export type RepoSource = z.infer<typeof RepoSourceSchema>;
 export type RunRequest = Omit<z.infer<typeof RunRequestSchema>, "budgets"> & {
   budgets: { maxSteps: number; maxMinutes: number; maxModelCalls: number };

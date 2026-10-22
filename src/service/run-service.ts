@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   runAutonomousTask,
@@ -9,7 +9,13 @@ import {
 } from "../agent";
 import type { ModelAdapter } from "../model";
 import { prepareRepository } from "./repo-source";
-import { parseRunRequest, RunRequestError, type RunRequest, type RunRequestPolicy } from "./run-request";
+import {
+  FollowUpRequestSchema,
+  parseRunRequest,
+  RunRequestError,
+  type RunRequest,
+  type RunRequestPolicy,
+} from "./run-request";
 
 export type RunRecordStatus = "queued" | "preparing" | "running" | AgentStatus;
 
@@ -25,7 +31,14 @@ export interface RunRecord {
   /** Why the run ended, including failures before the agent started (clone, workspace). */
   terminationReason: string | null;
   changedFiles: string[];
+  /** The agent's own summary of what it did; a follow-up run is given it as context. */
+  summary: string | null;
+  /** The run this one continues from, or null for a fresh run. */
+  parentRunId: string | null;
 }
+
+/** A run as a client sees it: the record plus the follow-ups made from it, newest first. */
+export type RunView = RunRecord & { childRunIds: string[] };
 
 export class RunNotFoundError extends Error {
   constructor() {
@@ -87,7 +100,9 @@ export class RunService {
     for (const entry of await readdir(options.runsRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       try {
-        const record = JSON.parse(await readFile(resolve(options.runsRoot, entry.name, "run.json"), "utf8")) as RunRecord;
+        const stored = JSON.parse(await readFile(resolve(options.runsRoot, entry.name, "run.json"), "utf8")) as RunRecord;
+        // Records written before follow-ups existed lack these fields.
+        const record: RunRecord = { ...stored, summary: stored.summary ?? null, parentRunId: stored.parentRunId ?? null };
         service.records.set(record.id, record);
         if (ACTIVE.has(record.status)) {
           await service.update(record, {
@@ -103,8 +118,9 @@ export class RunService {
     return service;
   }
 
-  async start(ownerId: string, input: unknown): Promise<RunRecord> {
-    const request = parseRunRequest(input, this.options.policy);
+  /** Starts a fresh run, or a follow-up when the input names a parentRunId. */
+  async start(ownerId: string, input: unknown): Promise<RunView> {
+    const { request, parentRunId } = this.resolveRequest(ownerId, input);
     if (request.planMode) throw new RunRequestError(["planMode: plan mode is not available in the web service yet."]);
     const active = [...this.records.values()].filter((run) => run.ownerId === ownerId && ACTIVE.has(run.status));
     if (active.length >= this.options.maxActiveRunsPerUser) {
@@ -120,6 +136,8 @@ export class RunService {
       finishedAt: null,
       terminationReason: null,
       changedFiles: [],
+      summary: null,
+      parentRunId,
     };
     await mkdir(this.runDir(record.id));
     await this.update(record, {});
@@ -127,26 +145,21 @@ export class RunService {
     this.live.set(record.id, { controller: new AbortController(), listeners: new Set() });
     this.queue.push(record.id);
     this.pump();
-    return structuredClone(record);
+    return this.view(record);
   }
 
   /** Another user's run looks exactly like a missing one, so ids cannot be probed. */
-  get(ownerId: string, id: string): RunRecord {
-    const record = this.records.get(id);
-    if (record === undefined || record.ownerId !== ownerId) throw new RunNotFoundError();
-    return structuredClone(record);
+  get(ownerId: string, id: string): RunView {
+    return this.view(this.owned(ownerId, id));
   }
 
-  list(ownerId: string): RunRecord[] {
-    return [...this.records.values()]
-      .filter((run) => run.ownerId === ownerId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .map((run) => structuredClone(run));
+  list(ownerId: string): RunView[] {
+    return this.newestFirst([...this.records.values()].filter((run) => run.ownerId === ownerId))
+      .map((run) => this.view(run));
   }
 
-  async cancel(ownerId: string, id: string): Promise<RunRecord> {
-    const record = this.records.get(id);
-    if (record === undefined || record.ownerId !== ownerId) throw new RunNotFoundError();
+  async cancel(ownerId: string, id: string): Promise<RunView> {
+    const record = this.owned(ownerId, id);
     if (record.status === "queued") {
       this.queue.splice(this.queue.indexOf(id), 1);
       await this.update(record, { status: "cancelled", terminationReason: "Cancelled before it started.", finishedAt: this.now().toISOString() });
@@ -154,7 +167,7 @@ export class RunService {
     } else {
       this.live.get(id)?.controller.abort();
     }
-    return structuredClone(record);
+    return this.view(record);
   }
 
   /**
@@ -186,6 +199,75 @@ export class RunService {
     return () => live?.listeners.delete(onLive);
   }
 
+  private resolveRequest(ownerId: string, input: unknown): { request: RunRequest; parentRunId: string | null } {
+    const isFollowUp = typeof input === "object" && input !== null && "parentRunId" in input;
+    if (!isFollowUp) {
+      const request = parseRunRequest(input, this.options.policy);
+      if (request.planMode) throw new RunRequestError(["planMode: plan mode is not available in the web service yet."]);
+      return { request, parentRunId: null };
+    }
+    const parsed = FollowUpRequestSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new RunRequestError(parsed.error.issues.map((issue) => `${issue.path.join(".") || "request"}: ${issue.message}`));
+    }
+    const parent = this.owned(ownerId, parsed.data.parentRunId);
+    if (ACTIVE.has(parent.status)) throw new RunRequestError(["parentRunId: the parent run has not finished yet."]);
+    const verificationCommands = parsed.data.verificationCommands ?? parent.request.verificationCommands;
+    // Re-validated against the policy, so a follow-up cannot exceed limits the parent was held to.
+    const request = parseRunRequest({
+      task: parsed.data.task,
+      repo: parent.request.repo,
+      provider: parent.request.provider,
+      ...(parent.request.model === undefined ? {} : { model: parent.request.model }),
+      budgets: parsed.data.budgets,
+      ...(verificationCommands === undefined ? {} : { verificationCommands }),
+    }, this.options.policy);
+    return { request, parentRunId: parent.id };
+  }
+
+  /** Another user's run looks exactly like a missing one, so ids cannot be probed. */
+  private owned(ownerId: string, id: string): RunRecord {
+    const record = this.records.get(id);
+    if (record === undefined || record.ownerId !== ownerId) throw new RunNotFoundError();
+    return record;
+  }
+
+  private view(record: RunRecord): RunView {
+    const children = this.newestFirst([...this.records.values()].filter((run) => run.parentRunId === record.id));
+    return { ...structuredClone(record), childRunIds: children.map((run) => run.id) };
+  }
+
+  private newestFirst(runs: RunRecord[]): RunRecord[] {
+    return runs.sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+  }
+
+  /**
+   * A follow-up starts from exactly where its parent ended: a clone of the parent's input
+   * snapshot (its isolated git history) with the parent's final patch applied. The follow-up's
+   * own patch is therefore incremental. The user's original repository is never touched.
+   */
+  private async prepareFromParent(parent: RunRecord, targetPath: string): Promise<string> {
+    const output = resolve(this.runDir(parent.id), "output");
+    await runGitOrThrow(["clone", "--quiet", "--no-hardlinks", resolve(output, "git"), targetPath], undefined, "Could not copy the parent run");
+    const patchPath = resolve(output, "patch.diff");
+    const hasPatch = await stat(patchPath).then((info) => info.size > 0, () => false);
+    if (hasPatch) {
+      await runGitOrThrow(["apply", "--binary", "--whitespace=nowarn", patchPath], targetPath, "The parent run's patch does not apply");
+    }
+    return targetPath;
+  }
+
+  private composeTask(record: RunRecord): string {
+    if (record.parentRunId === null) return record.request.task;
+    const parent = this.records.get(record.parentRunId)!;
+    return [
+      "This run continues an earlier run on the same repository. The workspace already contains that run's changes.",
+      `Earlier task:\n${parent.request.task}`,
+      `Earlier result (${parent.status}): ${parent.summary ?? parent.terminationReason ?? "no summary"}`,
+      `New instruction from the user:\n${record.request.task}`,
+    ].join("\n\n");
+  }
+
   private runDir(id: string): string {
     return resolve(this.options.runsRoot, id);
   }
@@ -213,23 +295,23 @@ export class RunService {
     const signal = live.controller.signal;
     try {
       await this.update(record, { status: "preparing", startedAt: this.now().toISOString() });
-      const repoPath = await (this.options.prepareRepository ?? prepareRepository)(
-        record.request.repo,
-        resolve(this.runDir(record.id), "repo"),
-        signal,
-      );
+      const target = resolve(this.runDir(record.id), "repo");
+      const repoPath = record.parentRunId === null
+        ? await (this.options.prepareRepository ?? prepareRepository)(record.request.repo, target, signal)
+        : await this.prepareFromParent(this.records.get(record.parentRunId)!, target);
       if (signal.aborted) throw new Error("Cancelled while preparing the repository.");
       await this.update(record, { status: "running" });
       const result: AgentRunResult = await (this.options.runTask ?? runAutonomousTask)(
         {
           repoPath,
           outputPath: resolve(this.runDir(record.id), "output"),
-          task: record.request.task,
+          task: this.composeTask(record),
           maxSteps: record.request.budgets.maxSteps,
           maxMinutes: record.request.budgets.maxMinutes,
           maxModelCalls: record.request.budgets.maxModelCalls,
           commandNetwork: this.options.policy.commandNetwork,
           ...(record.request.verificationCommands === undefined ? {} : { verificationCommands: record.request.verificationCommands }),
+          ...(record.parentRunId === null ? {} : { parentRunId: record.parentRunId }),
         },
         {
           model: this.options.createModel(record.request),
@@ -243,6 +325,7 @@ export class RunService {
         status: result.status,
         terminationReason: result.terminationReason,
         changedFiles: result.changedFiles,
+        summary: result.summary,
         finishedAt: this.now().toISOString(),
       });
     } catch (error) {
@@ -254,4 +337,15 @@ export class RunService {
       });
     }
   }
+}
+
+async function runGitOrThrow(args: string[], cwd: string | undefined, failure: string): Promise<void> {
+  const process = Bun.spawn(["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args], {
+    ...(cwd === undefined ? {} : { cwd }),
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const [stderr, exitCode] = await Promise.all([new Response(process.stderr).text(), process.exited]);
+  if (exitCode !== 0) throw new Error(`${failure}: ${stderr.trim() || `git exited ${exitCode}`}`);
 }
