@@ -1,10 +1,11 @@
 import { startLocalServer } from "./local";
 
 /**
- * `bun run app`: starts the desktop backend and opens it in the browser. A native window (Electron
- * or Tauri) will start this same process and read the ready line instead of opening a browser.
+ * `bun run app`: starts the desktop backend and opens it in the browser. The Tauri shell in
+ * desktop/ starts this same process with --no-open --watch-stdin and reads the ready line instead.
  */
 const noOpen = process.argv.includes("--no-open");
+const watchStdin = process.argv.includes("--watch-stdin");
 const server = await startLocalServer({
   ...(Bun.env.CARAMEL_DATA_DIR === undefined ? {} : { dataDir: Bun.env.CARAMEL_DATA_DIR }),
   ...(Bun.env.PORT === undefined ? {} : { port: Number(Bun.env.PORT) }),
@@ -26,10 +27,20 @@ if (!noOpen) {
 }
 
 let stopping = false;
-for (const signal of ["SIGTERM", "SIGINT"] as const) {
-  process.on(signal, () => {
-    if (stopping) process.exit(130);
-    stopping = true;
-    void server.stop().finally(() => process.exit(0));
-  });
+function shutdown(): void {
+  if (stopping) process.exit(130);
+  stopping = true;
+  void server.stop().finally(() => process.exit(0));
+}
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, shutdown);
+
+if (watchStdin) {
+  // The shell holds our stdin open. If it crashes or is force-quit it cannot send a signal, but the
+  // OS closes the pipe, so end-of-input means the window is gone and the backend must not linger.
+  void (async () => {
+    for await (const _ of Bun.stdin.stream()) {
+      // Input is ignored; only the end of it matters.
+    }
+    shutdown();
+  })();
 }
