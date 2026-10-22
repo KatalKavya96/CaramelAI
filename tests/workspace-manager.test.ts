@@ -379,3 +379,18 @@ describe("IsolatedWorkspace fingerprint", () => {
     expect(await fingerprintOf()).toBe(baseline);
   });
 });
+
+describe("IsolatedWorkspace submodules", () => {
+  test("snapshots a repository that contains a submodule", async () => {
+    const library = await sourceRepository();
+    const source = await sourceRepository();
+    git(source, ["-c", "protocol.file.allow=always", "submodule", "add", "-q", library, "lib"]);
+    git(source, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "add submodule"]);
+
+    const workspace = await createWorkspace(source);
+    const state = await workspace.inspectChanges();
+    if (!state.ok) throw new Error(state.error.message);
+    expect(state.value.changedFiles).toEqual([]);
+    expect(await readFile(join(workspace.workspacePath, "a.txt"), "utf8")).toBe("alpha\n");
+  });
+});

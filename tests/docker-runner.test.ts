@@ -32,8 +32,18 @@ class FakeDockerBackend implements DockerBackend {
   killed = false;
 
   constructor(
-    private readonly output: { stdout?: string; stderr?: string; exitCode?: number; neverExit?: boolean } = {},
+    private readonly output: {
+      stdout?: string;
+      stderr?: string;
+      exitCode?: number;
+      neverExit?: boolean;
+      imageMissing?: boolean;
+    } = {},
   ) {}
+
+  async imageAvailable(): Promise<boolean> {
+    return this.output.imageMissing !== true;
+  }
 
   run(args: readonly string[]): RunningDockerProcess {
     this.runArguments = args;
@@ -163,6 +173,31 @@ describe("DockerCommandRunner", () => {
 
     const result = await commandRunner.run({ command: "exit 7", purpose: "agent" });
     expect(result).toMatchObject({ status: "completed", exitCode: 7 });
+  });
+
+  test("reports Docker's own failures as runner errors, not command failures", async () => {
+    const workspace = await temporaryDirectory("dinner-workspace-");
+    const logs = await temporaryDirectory("dinner-logs-");
+    const commandRunner = await runner(
+      workspace,
+      logs,
+      new FakeDockerBackend({ stderr: "docker: Error response from daemon: oops\n", exitCode: 125 }),
+    );
+
+    const result = await commandRunner.run({ command: "bun test", purpose: "verification" });
+    expect(result).toMatchObject({ status: "runner_error", exitCode: null });
+    expect(result.error).toContain("Error response from daemon");
+  });
+
+  test("fails fast when the runner image is missing", async () => {
+    const workspace = await temporaryDirectory("dinner-workspace-");
+    const logs = await temporaryDirectory("dinner-logs-");
+    await expect(
+      DockerCommandRunner.create(
+        { workspacePath: workspace, logsPath: logs },
+        { backend: new FakeDockerBackend({ imageMissing: true }) },
+      ),
+    ).rejects.toThrow("dinner-runner:0.1.0");
   });
 
   test("caps previews and logs while continuing to drain output", async () => {

@@ -208,23 +208,25 @@ export class RepositoryTools {
     readonly rootPath: string,
     private readonly limits: Required<RepositoryToolLimits>,
     private readonly gitDir: string | undefined,
+    private readonly baseRevision: string | undefined,
   ) {}
 
   /**
    * `options.gitDir` points git at metadata kept outside `rootPath` (an isolated workspace).
-   * Without it, git discovers the repository from `rootPath` as usual.
+   * Without it, git discovers the repository from `rootPath` as usual. `options.baseRevision`
+   * pins what `inspectDiff` compares against, so the review matches the exported patch.
    */
   static async create(
     rootPath: string,
     limits: RepositoryToolLimits = {},
-    options: { gitDir?: string } = {},
+    options: { gitDir?: string; baseRevision?: string } = {},
   ): Promise<RepositoryTools> {
     const canonicalRoot = await realpath(resolve(rootPath));
     if (!(await stat(canonicalRoot)).isDirectory()) {
       throw new RepositoryToolException("NOT_A_DIRECTORY", `Not a directory: ${canonicalRoot}`);
     }
     const merged = { ...DEFAULT_LIMITS, ...limits };
-    return new RepositoryTools(canonicalRoot, {
+    const validatedLimits = {
       maxListEntries: positiveInteger(merged.maxListEntries, "maxListEntries"),
       maxListDepth: positiveInteger(merged.maxListDepth, "maxListDepth"),
       maxReadLines: positiveInteger(merged.maxReadLines, "maxReadLines"),
@@ -232,7 +234,9 @@ export class RepositoryTools {
       maxSearchResults: positiveInteger(merged.maxSearchResults, "maxSearchResults"),
       maxSearchFiles: positiveInteger(merged.maxSearchFiles, "maxSearchFiles"),
       maxSearchFileBytes: positiveInteger(merged.maxSearchFileBytes, "maxSearchFileBytes"),
-    }, options.gitDir === undefined ? undefined : await realpath(resolve(options.gitDir)));
+    };
+    const gitDir = options.gitDir === undefined ? undefined : await realpath(resolve(options.gitDir));
+    return new RepositoryTools(canonicalRoot, validatedLimits, gitDir, options.baseRevision);
   }
 
   async listFiles(options: { path?: string; maxDepth?: number } = {}): Promise<RepositoryToolResult<FileListResult>> {
@@ -432,10 +436,11 @@ export class RepositoryTools {
   async inspectDiff(): Promise<RepositoryToolResult<RepositoryDiff>> {
     try {
       await this.assertGitRepository();
-      const head = await runGit(this.rootPath, ["rev-parse", "--verify", "HEAD"], 1_024, this.gitDir);
+      const base = this.baseRevision ?? "HEAD";
+      const head = await runGit(this.rootPath, ["rev-parse", "--verify", base], 1_024, this.gitDir);
       const diffCommands =
         head.exitCode === 0
-          ? [["diff", "HEAD", "--no-ext-diff", "--binary", "--", "."]]
+          ? [["diff", base, "--no-ext-diff", "--binary", "--", "."]]
           : [
               ["diff", "--cached", "--no-ext-diff", "--binary", "--", "."],
               ["diff", "--no-ext-diff", "--binary", "--", "."],

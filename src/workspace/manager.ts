@@ -179,6 +179,20 @@ async function sourceRevision(sourcePath: string): Promise<string | null> {
   return result.exitCode === 0 ? result.stdout.trim() : null;
 }
 
+/**
+ * Submodule paths (gitlinks, mode 160000). Their contents belong to another repository, so the
+ * snapshot keeps the pinned commit from the checkout and does not copy their working tree.
+ */
+async function submodulePaths(sourcePath: string): Promise<Set<string>> {
+  const output = await requireGit(sourcePath, ["ls-files", "--stage", "-z"]);
+  const paths = new Set<string>();
+  for (const entry of output.split("\0")) {
+    const tab = entry.indexOf("\t");
+    if (tab !== -1 && entry.startsWith("160000 ")) paths.add(entry.slice(tab + 1));
+  }
+  return paths;
+}
+
 async function repositoryFiles(sourcePath: string): Promise<string[]> {
   const output = await requireGit(sourcePath, [
     "ls-files",
@@ -187,7 +201,10 @@ async function repositoryFiles(sourcePath: string): Promise<string[]> {
     "--exclude-standard",
     "-z",
   ]);
-  return [...new Set(output.split("\0").filter(Boolean))].sort();
+  const submodules = await submodulePaths(sourcePath);
+  return [...new Set(output.split("\0").filter(Boolean))]
+    .filter((path) => !submodules.has(path))
+    .sort();
 }
 
 async function copyRepositoryEntry(sourceRoot: string, targetRoot: string, path: string): Promise<void> {

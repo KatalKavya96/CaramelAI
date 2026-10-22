@@ -196,3 +196,17 @@ describe("RepositoryTools Git inspection", () => {
     });
   });
 });
+
+describe("RepositoryTools diff base", () => {
+  test("diffs against the pinned base revision even when HEAD moves", async () => {
+    const root = await gitRepository();
+    const base = git(root, ["rev-parse", "HEAD"]).trim();
+    await writeFile(join(root, "src", "math.ts"), "export const add = (a: number, b: number) => a - b;\n");
+    git(root, ["-c", "user.name=Dinner Tests", "-c", "user.email=test@example.invalid", "commit", "-qam", "moved head"]);
+
+    const tools = await RepositoryTools.create(root, {}, { baseRevision: base });
+    const diff = await tools.inspectDiff();
+    if (!diff.ok) throw new Error(diff.error.message);
+    expect(diff.value.trackedPatch).toContain("-export const add = (a: number, b: number) => a + b;");
+  });
+});
