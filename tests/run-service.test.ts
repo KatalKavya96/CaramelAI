@@ -43,6 +43,7 @@ async function openService(overrides: Partial<RunServiceOptions> = {}): Promise<
     policy: LOCAL_POLICY,
     maxConcurrentRuns: 2,
     maxActiveRunsPerUser: 1,
+    resolveKey: async () => "sk-test-key-0000",
     // No command runs in these scripts; this keeps the tests independent of Docker.
     createCommandExecutor: async () => ({ run: async () => { throw new Error("no commands in this test"); } }),
     createModel: () => new FakeModelAdapter([turn({ type: "list_files" }), ...[1, 2, 3].map(() => turn({ type: "finish", summary: "nothing to do" }))]),

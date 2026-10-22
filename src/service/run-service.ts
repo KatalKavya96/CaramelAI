@@ -47,6 +47,21 @@ export class RunNotFoundError extends Error {
   }
 }
 
+export class MissingProviderKeyError extends Error {
+  constructor(readonly provider: string) {
+    super(`No ${provider} key is configured for this account.`);
+    this.name = "MissingProviderKeyError";
+  }
+}
+
+/** The request is valid but conflicts with a run's current state (e.g. its parent is still running). */
+export class RunConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RunConflictError";
+  }
+}
+
 export class RunLimitError extends Error {
   constructor(message: string) {
     super(message);
@@ -61,7 +76,9 @@ export interface RunServiceOptions {
   maxConcurrentRuns: number;
   /** Queued plus running runs one user may have. */
   maxActiveRunsPerUser: number;
-  createModel: (request: RunRequest) => ModelAdapter;
+  /** The user's own key for a provider (bring your own key), or null when they have none. */
+  resolveKey: (ownerId: string, provider: RunRequest["provider"]) => Promise<string | null>;
+  createModel: (request: RunRequest, apiKey: string) => ModelAdapter;
   createCommandExecutor?: AutonomousRunDependencies["createCommandExecutor"];
   /** Injected in tests; defaults to the real agent and git clone. */
   runTask?: typeof runAutonomousTask;
@@ -74,6 +91,8 @@ type Listener = (event: AgentEvent) => void;
 interface LiveRun {
   controller: AbortController;
   listeners: Set<Listener>;
+  /** Decrypted only for the life of the run; never persisted with the record. */
+  apiKey: string;
 }
 
 const ACTIVE: ReadonlySet<RunRecordStatus> = new Set(["queued", "preparing", "running"]);
@@ -122,6 +141,8 @@ export class RunService {
   async start(ownerId: string, input: unknown): Promise<RunView> {
     const { request, parentRunId } = this.resolveRequest(ownerId, input);
     if (request.planMode) throw new RunRequestError(["planMode: plan mode is not available in the web service yet."]);
+    const apiKey = await this.options.resolveKey(ownerId, request.provider);
+    if (apiKey === null) throw new MissingProviderKeyError(request.provider);
     const active = [...this.records.values()].filter((run) => run.ownerId === ownerId && ACTIVE.has(run.status));
     if (active.length >= this.options.maxActiveRunsPerUser) {
       throw new RunLimitError(`You already have ${active.length} active run(s); the limit is ${this.options.maxActiveRunsPerUser}.`);
@@ -142,7 +163,7 @@ export class RunService {
     await mkdir(this.runDir(record.id));
     await this.update(record, {});
     this.records.set(record.id, record);
-    this.live.set(record.id, { controller: new AbortController(), listeners: new Set() });
+    this.live.set(record.id, { controller: new AbortController(), listeners: new Set(), apiKey });
     this.queue.push(record.id);
     this.pump();
     return this.view(record);
@@ -211,7 +232,7 @@ export class RunService {
       throw new RunRequestError(parsed.error.issues.map((issue) => `${issue.path.join(".") || "request"}: ${issue.message}`));
     }
     const parent = this.owned(ownerId, parsed.data.parentRunId);
-    if (ACTIVE.has(parent.status)) throw new RunRequestError(["parentRunId: the parent run has not finished yet."]);
+    if (ACTIVE.has(parent.status)) throw new RunConflictError("The parent run has not finished yet.");
     const verificationCommands = parsed.data.verificationCommands ?? parent.request.verificationCommands;
     // Re-validated against the policy, so a follow-up cannot exceed limits the parent was held to.
     const request = parseRunRequest({
@@ -310,11 +331,13 @@ export class RunService {
           maxMinutes: record.request.budgets.maxMinutes,
           maxModelCalls: record.request.budgets.maxModelCalls,
           commandNetwork: this.options.policy.commandNetwork,
+          // Passed so the event log redacts it wherever it might appear.
+          apiKey: live.apiKey,
           ...(record.request.verificationCommands === undefined ? {} : { verificationCommands: record.request.verificationCommands }),
           ...(record.parentRunId === null ? {} : { parentRunId: record.parentRunId }),
         },
         {
-          model: this.options.createModel(record.request),
+          model: this.options.createModel(record.request, live.apiKey),
           runId: record.id,
           signal,
           onEvent: (event) => live.listeners.forEach((listener) => listener(event)),
