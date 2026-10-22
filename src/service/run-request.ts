@@ -6,7 +6,10 @@ import { DEFAULT_BUDGETS } from "../config";
  * request would let one user point the harness at any folder on the host.
  */
 export const RepoSourceSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("local"), path: z.string().trim().min(1) }),
+  z.object({
+    kind: z.literal("local"),
+    path: z.string().trim().min(1).refine((path) => path.startsWith("/"), "Local paths must be absolute."),
+  }),
   z.object({
     kind: z.literal("git"),
     url: z.string().trim().url().refine((url) => url.startsWith("https://"), "Only https git URLs are accepted."),
@@ -30,6 +33,8 @@ export const RunRequestSchema = z.object({
   budgets: RunBudgetsSchema.default({}),
   verificationCommands: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
   planMode: z.boolean().default(false),
+  /** Network for this run's commands. "full" only where the policy allows it. */
+  network: z.enum(["none", "full"]).optional(),
 });
 
 /** Continues a finished run: repo, provider and model come from the parent. */
@@ -38,12 +43,14 @@ export const FollowUpRequestSchema = z.object({
   task: z.string().trim().min(1, "task must not be empty.").max(20_000),
   budgets: RunBudgetsSchema.default({}),
   verificationCommands: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
+  network: z.enum(["none", "full"]).optional(),
 });
 
 export type FollowUpRequest = z.infer<typeof FollowUpRequestSchema>;
 export type RepoSource = z.infer<typeof RepoSourceSchema>;
-export type RunRequest = Omit<z.infer<typeof RunRequestSchema>, "budgets"> & {
+export type RunRequest = Omit<z.infer<typeof RunRequestSchema>, "budgets" | "network"> & {
   budgets: { maxSteps: number; maxMinutes: number; maxModelCalls: number };
+  network: "none" | "full";
 };
 
 /** What the server allows, independent of what a client asks for. */
@@ -53,8 +60,10 @@ export interface RunRequestPolicy {
   /** Hostnames a git URL may point at, e.g. ["github.com"]. */
   allowedGitHosts: readonly string[];
   ceilings: { maxSteps: number; maxMinutes: number; maxModelCalls: number };
-  /** Network for target-repository commands; "none" on a shared server. */
+  /** Network for target-repository commands when a request does not choose; "none" on a shared server. */
   commandNetwork: "bridge" | "none";
+  /** Whether a request may turn the network on for its commands. */
+  allowRunNetwork: boolean;
   /** Where commands run. A shared server uses Docker: OS sandboxes share one kernel and user between tenants. */
   sandbox: "auto" | "native" | "docker";
 }
@@ -64,7 +73,21 @@ export const SHARED_SERVER_POLICY: RunRequestPolicy = {
   allowedGitHosts: ["github.com"],
   ceilings: { maxSteps: 120, maxMinutes: 30, maxModelCalls: 80 },
   commandNetwork: "none",
+  allowRunNetwork: false,
   sandbox: "docker",
+};
+
+/**
+ * One person on their own machine: their folders, their network, their keys. Limits are a
+ * safety net against runaway runs rather than a fair-share rule.
+ */
+export const LOCAL_APP_POLICY: RunRequestPolicy = {
+  allowLocalRepos: true,
+  allowedGitHosts: ["github.com", "gitlab.com", "bitbucket.org", "codeberg.org"],
+  ceilings: { maxSteps: 300, maxMinutes: 120, maxModelCalls: 200 },
+  commandNetwork: "none",
+  allowRunNetwork: true,
+  sandbox: "auto",
 };
 
 export class RunRequestError extends Error {
@@ -86,7 +109,11 @@ export function parseRunRequest(input: unknown, policy: RunRequestPolicy): RunRe
   const request: RunRequest = {
     ...parsed.data,
     budgets: { maxSteps: budget("maxSteps"), maxMinutes: budget("maxMinutes"), maxModelCalls: budget("maxModelCalls") },
+    network: parsed.data.network ?? (policy.commandNetwork === "bridge" ? "full" : "none"),
   };
+  if (request.network === "full" && !policy.allowRunNetwork && policy.commandNetwork !== "bridge") {
+    issues.push("network: this server runs commands without network access.");
+  }
   if (request.repo.kind === "local" && !policy.allowLocalRepos) {
     issues.push("repo: this server accepts only git URLs, not local paths.");
   }

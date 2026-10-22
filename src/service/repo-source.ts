@@ -1,3 +1,4 @@
+import { realpath, stat } from "node:fs/promises";
 import type { RepoSource } from "./run-request";
 
 const CLONE_TIMEOUT_MS = 120_000;
@@ -8,7 +9,12 @@ const CLONE_TIMEOUT_MS = 120_000;
  * submodules, so a hostile URL or repository cannot reach other protocols or run code here.
  */
 export async function prepareRepository(source: RepoSource, targetPath: string, signal?: AbortSignal): Promise<string> {
-  if (source.kind === "local") return source.path;
+  if (source.kind === "local") {
+    // The agent works on a snapshot of this folder; the folder itself is only read.
+    const path = await realpath(source.path).catch(() => null);
+    if (path === null || !(await stat(path)).isDirectory()) throw new Error(`Folder not found: ${source.path}`);
+    return path;
+  }
   const args = [
     "-c", "protocol.allow=never",
     "-c", "protocol.https.allow=always",
