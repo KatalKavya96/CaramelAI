@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 /** Resolves the signed-in user for a request, or null. The HTTP layer depends only on this. */
 export interface Authenticator {
   userId(request: Request): Promise<string | null>;
+  /** Display details for /api/me. */
+  profile?(request: Request): { login: string } | null;
 }
 
 const SESSION_COOKIE = "caramel_session";
@@ -130,6 +132,11 @@ export class GitHubAuth implements Authenticator {
 
   async userId(request: Request): Promise<string | null> {
     return this.session(request)?.userId ?? null;
+  }
+
+  profile(request: Request): { login: string } | null {
+    const session = this.session(request);
+    return session === null ? null : { login: session.login };
   }
 
   session(request: Request): { userId: string; login: string } | null {

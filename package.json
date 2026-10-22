@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bun run src/cli.ts",
     "server": "bun run src/server/main.ts",
+    "app": "bun run src/server/local-main.ts",
     "benchmark": "bun run src/benchmark/cli.ts",
     "scorecard": "bun run src/benchmark/cli.ts report --input benchmarks/reports/baseline-2026-09-26.json --comparison benchmarks/reports/localization-comparison-2026-09-26.json",
     "test": "bun test",

@@ -44,11 +44,111 @@ interface StoredKey {
 
 type UserKeys = Partial<Record<Provider, StoredKey>>;
 
+/** Where provider keys live: encrypted files on a shared server, the OS keychain on a desktop. */
+export interface ProviderKeyStore {
+  list(userId: string): Promise<ProviderKeyView[]>;
+  set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView>;
+  markVerified(userId: string, provider: Provider, verified: boolean): Promise<void>;
+  delete(userId: string, provider: Provider): Promise<void>;
+  reveal(userId: string, provider: Provider): Promise<string | null>;
+}
+
+/** The subset of Bun.secrets the keychain store needs, so tests can swap in a map. */
+export interface SecretBackend {
+  get(options: { service: string; name: string }): Promise<string | null>;
+  set(options: { service: string; name: string; value: string }): Promise<void>;
+  delete(options: { service: string; name: string }): Promise<boolean>;
+}
+
+const KEYCHAIN_SERVICE = "dev.caramel.app";
+
+/**
+ * Keys in the operating system's credential store (macOS Keychain, Windows Credential Manager,
+ * libsecret on Linux) through Bun.secrets. Only non-secret details (last four characters,
+ * verified flag) go to a file, so listing keys never touches the keychain.
+ */
+export class KeychainKeyStore implements ProviderKeyStore {
+  private constructor(
+    private readonly indexPath: string,
+    private readonly secrets: SecretBackend,
+    private readonly now: () => Date,
+  ) {}
+
+  static async open(options: { root: string; secrets?: SecretBackend; now?: () => Date }): Promise<KeychainKeyStore> {
+    await mkdir(options.root, { recursive: true, mode: 0o700 });
+    return new KeychainKeyStore(
+      resolve(options.root, "keychain-index.json"),
+      options.secrets ?? (Bun.secrets as unknown as SecretBackend),
+      options.now ?? (() => new Date()),
+    );
+  }
+
+  async list(userId: string): Promise<ProviderKeyView[]> {
+    const index = (await this.readIndex())[userId] ?? {};
+    return PROVIDERS.map((provider) => ({
+      provider,
+      last4: index[provider]?.last4 ?? null,
+      verified: index[provider]?.verified ?? false,
+      defaultModel: DEFAULT_MODELS[provider],
+      updatedAt: index[provider]?.updatedAt ?? null,
+    }));
+  }
+
+  async set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView> {
+    const trimmed = secret.trim();
+    if (trimmed.length < 8 || trimmed.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+    await this.secrets.set({ service: KEYCHAIN_SERVICE, name: this.name(userId, provider), value: trimmed });
+    await this.updateIndex(userId, provider, { last4: trimmed.slice(-4), verified, updatedAt: this.now().toISOString() });
+    return (await this.list(userId)).find((view) => view.provider === provider)!;
+  }
+
+  async markVerified(userId: string, provider: Provider, verified: boolean): Promise<void> {
+    const current = (await this.readIndex())[userId]?.[provider];
+    if (current !== undefined) await this.updateIndex(userId, provider, { ...current, verified });
+  }
+
+  async delete(userId: string, provider: Provider): Promise<void> {
+    await this.secrets.delete({ service: KEYCHAIN_SERVICE, name: this.name(userId, provider) });
+    await this.updateIndex(userId, provider, undefined);
+  }
+
+  async reveal(userId: string, provider: Provider): Promise<string | null> {
+    return await this.secrets.get({ service: KEYCHAIN_SERVICE, name: this.name(userId, provider) });
+  }
+
+  private name(userId: string, provider: Provider): string {
+    return `${userId}:${provider}`;
+  }
+
+  private async readIndex(): Promise<Record<string, Partial<Record<Provider, { last4: string; verified: boolean; updatedAt: string }>>>> {
+    try {
+      return JSON.parse(await readFile(this.indexPath, "utf8"));
+    } catch {
+      return {};
+    }
+  }
+
+  private async updateIndex(
+    userId: string,
+    provider: Provider,
+    entry: { last4: string; verified: boolean; updatedAt: string } | undefined,
+  ): Promise<void> {
+    const index = await this.readIndex();
+    const user = index[userId] ?? {};
+    if (entry === undefined) delete user[provider];
+    else user[provider] = entry;
+    index[userId] = user;
+    const temporary = `${this.indexPath}.${crypto.randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(index), { mode: 0o600 });
+    await rename(temporary, this.indexPath);
+  }
+}
+
 /**
  * Per-user provider keys, encrypted at rest with AES-256-GCM. The owner and provider are bound in
  * as additional data, so a ciphertext copied into another user's file fails to decrypt.
  */
-export class KeyStore {
+export class KeyStore implements ProviderKeyStore {
   private constructor(
     private readonly root: string,
     private readonly key: CryptoKey,

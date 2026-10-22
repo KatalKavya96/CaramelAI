@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
-import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "../model";
 import { KeyStore, RunService, SHARED_SERVER_POLICY } from "../service";
 import { createApp } from "./app";
 import { GitHubAuth, SqliteSessionStore } from "./auth";
+import { createProviderModel } from "./providers";
 
 function required(name: string): string {
   const value = Bun.env[name]?.trim();
@@ -33,12 +33,7 @@ const service = await RunService.open({
   maxConcurrentRuns: positiveInteger("CARAMEL_MAX_CONCURRENT_RUNS", 2),
   maxActiveRunsPerUser: positiveInteger("CARAMEL_MAX_ACTIVE_RUNS_PER_USER", 1),
   resolveKey: (ownerId, provider) => keys.reveal(ownerId, provider),
-  createModel: (request, apiKey) =>
-    request.provider === "deepseek"
-      ? createDeepSeekModel({ apiKey, ...(request.model === undefined ? {} : { model: request.model }) })
-      : request.provider === "qwen"
-        ? createQwenModel({ apiKey, ...(request.model === undefined ? {} : { model: request.model }) })
-        : createOpenRouterModel({ apiKey, ...(request.model === undefined ? {} : { model: request.model }) }),
+  createModel: createProviderModel,
 });
 
 const app = createApp({
@@ -55,12 +50,6 @@ const app = createApp({
     if (request.method === "POST" && url.pathname === "/auth/logout") {
       if (request.headers.get("origin") !== publicOrigin) return new Response(null, { status: 403 });
       return auth.logout(request);
-    }
-    if (request.method === "GET" && url.pathname === "/api/me") {
-      const session = auth.session(request);
-      return session === null
-        ? Response.json({ error: "unauthenticated" }, { status: 401 })
-        : Response.json(session);
     }
     return null;
   },

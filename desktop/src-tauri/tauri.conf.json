@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Caramel",
+  "version": "0.1.0",
+  "identifier": "dev.caramel.app",
+  "build": {},
+  "app": {
+    "windows": [],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "externalBin": ["binaries/caramel-backend"],
+    "resources": { "../../web/dist/": "web-dist/" }
+  }
+}

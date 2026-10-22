@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentRunResult, runAutonomousTask } from "../src/agent";
@@ -121,6 +121,38 @@ describe("RunService", () => {
     await waitFor(() => service.get("b", second.id).status === "partial");
   });
 
+  test("applies a local run's patch to the real folder once, and reports conflicts instead of half-applying", async () => {
+    const repo = await sourceRepo();
+    const patch = [
+      "diff --git a/a.txt b/a.txt",
+      "--- a/a.txt",
+      "+++ b/a.txt",
+      "@@ -1 +1 @@",
+      "-alpha",
+      "+beta",
+      "",
+    ].join("\n");
+    const runTask = (async (options: { outputPath: string }) => {
+      await mkdir(options.outputPath, { recursive: true });
+      await writeFile(join(options.outputPath, "patch.diff"), patch);
+      return { status: "verified", terminationReason: "done", changedFiles: ["a.txt"] } as unknown as AgentRunResult;
+    }) as unknown as typeof runAutonomousTask;
+    const service = await openService({ runTask });
+    const run = await service.start("kavya", { task: "t", provider: "openrouter", repo: { kind: "local", path: repo } });
+    await waitFor(() => service.get("kavya", run.id).status === "verified");
+
+    await writeFile(join(repo, "a.txt"), "edited meanwhile\n");
+    const conflict = await service.apply("kavya", run.id);
+    expect(conflict).toMatchObject({ applied: false, reason: "conflicts", conflicts: ["a.txt"] });
+    expect(await readFile(join(repo, "a.txt"), "utf8")).toBe("edited meanwhile\n");
+
+    await writeFile(join(repo, "a.txt"), "alpha\n");
+    expect(await service.apply("kavya", run.id)).toEqual({ applied: true, files: ["a.txt"] });
+    expect(await readFile(join(repo, "a.txt"), "utf8")).toBe("beta\n");
+    expect(await service.apply("kavya", run.id)).toMatchObject({ applied: false, reason: "already_applied" });
+    await expect(service.apply("someone-else", run.id)).rejects.toBeInstanceOf(RunNotFoundError);
+  });
+
   test("cancels a queued run without starting it", async () => {
     const { runTask, gates } = gatedRunTask();
     const service = await openService({ runTask, maxConcurrentRuns: 1, prepareRepository: async () => "/unused" });
@@ -216,9 +248,12 @@ describe("RunService follow-up runs", () => {
 });
 
 describe("prepareRepository", () => {
-  test("uses a local path as is and reports a failed clone with its URL", async () => {
+  test("uses an existing local folder and reports a missing one or a failed clone", async () => {
     const { prepareRepository } = await import("../src/service");
-    expect(await prepareRepository({ kind: "local", path: "/some/repo" }, "/unused")).toBe("/some/repo");
+    const { realpath } = await import("node:fs/promises");
+    const repo = await sourceRepo();
+    expect(await prepareRepository({ kind: "local", path: repo }, "/unused")).toBe(await realpath(repo));
+    await expect(prepareRepository({ kind: "local", path: "/no/such/folder" }, "/unused")).rejects.toThrow("Folder not found");
     const target = join(await temporaryDirectory("caramel-clone-"), "repo");
     await expect(prepareRepository({ kind: "git", url: "https://127.0.0.1:1/nothing.git" }, target)).rejects.toThrow(
       "Could not clone https://127.0.0.1:1/nothing.git",
