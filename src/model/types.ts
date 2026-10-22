@@ -64,6 +64,8 @@ export interface TextTurn {
 
 export interface CompletionBudget {
   remainingTimeMs?: number;
+  /** Aborting cancels the in-flight request and any pending retry. */
+  signal?: AbortSignal;
 }
 
 export interface ModelAdapter {

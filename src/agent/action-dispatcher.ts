@@ -26,6 +26,7 @@ export interface DispatchActionOptions {
   remainingTimeMs: number;
   /** Workspace state before the action, carried over from the previous step. */
   before: WorkspaceState;
+  signal?: AbortSignal | undefined;
 }
 
 export async function currentState(workspace: IsolatedWorkspace): Promise<WorkspaceState> {
@@ -139,6 +140,7 @@ async function executeCommandAction(
   action: Extract<ModelAction, { type: "run_command" }>,
   commandExecutor: CommandExecutor,
   remainingTimeMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<{ result: CommandResult; verification?: CommandResult; failure?: ToolObservation["failure"] }> {
   const requestedTimeout = action.timeoutMs ?? remainingTimeMs;
   const commandResult = await commandExecutor.run({
@@ -146,6 +148,7 @@ async function executeCommandAction(
     purpose: action.purpose ?? "agent",
     ...(action.cwd === undefined ? {} : { cwd: action.cwd }),
     timeoutMs: Math.max(1, Math.min(requestedTimeout, remainingTimeMs)),
+    ...(signal === undefined ? {} : { signal }),
   });
   const verification = commandResult.purpose === "verification" ? commandResult : undefined;
   const kind = classifyCommandFailure(commandResult);
@@ -181,7 +184,7 @@ export async function dispatchAction(options: DispatchActionOptions): Promise<To
   ) {
     outcome = await executeCheckpointAction(action, workspace, checkpoints);
   } else {
-    outcome = await executeCommandAction(action, commandExecutor, remainingTimeMs);
+    outcome = await executeCommandAction(action, commandExecutor, remainingTimeMs, options.signal);
   }
 
   const after = await currentState(workspace);

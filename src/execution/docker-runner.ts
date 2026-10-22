@@ -5,6 +5,8 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { DockerCliBackend, type DockerBackend, type RunningDockerProcess } from "./docker-backend";
 import type { CommandOutput, CommandRequest, CommandResult } from "./types";
 
+const CANCELLED_MESSAGE = "Command cancelled.";
+
 export interface DockerRunnerOptions {
   workspacePath: string;
   logsPath: string;
@@ -324,6 +326,7 @@ export class DockerCommandRunner {
     let runningProcess: RunningDockerProcess | undefined;
 
     try {
+      if (request.signal?.aborted === true) throw new Error(CANCELLED_MESSAGE);
       const validated = await this.validateRequest(request);
       const args = buildDockerRunArguments({
         containerName,
@@ -358,8 +361,25 @@ export class DockerCommandRunner {
         process,
         containerName,
         validated.timeoutMs,
+        request.signal,
       );
       const [stdoutResult, stderrResult] = await Promise.all([stdout, stderr]);
+      if (completion.cancelled) {
+        return {
+          commandId,
+          command: request.command,
+          purpose: request.purpose,
+          cwd: validated.cwd,
+          image: this.options.image,
+          status: "runner_error",
+          exitCode: null,
+          durationMs: Math.max(0, this.now() - startedAt),
+          timeoutMs: validated.timeoutMs,
+          stdout: stdoutResult,
+          stderr: stderrResult,
+          error: CANCELLED_MESSAGE,
+        };
+      }
       if (!completion.timedOut && completion.exitCode === DOCKER_RUN_FAILURE_EXIT) {
         return {
           commandId,
@@ -474,26 +494,41 @@ export class DockerCommandRunner {
     process: RunningDockerProcess,
     containerName: string,
     timeoutMs: number,
-  ): Promise<{ exitCode: number | null; timedOut: boolean }> {
+    signal?: AbortSignal,
+  ): Promise<{ exitCode: number | null; timedOut: boolean; cancelled: boolean }> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<{ exitCode: null; timedOut: true }>((resolveTimeout) => {
-      timeoutHandle = setTimeout(async () => {
-        try {
-          await this.backend.removeForce(containerName);
-        } finally {
-          process.kill();
-          resolveTimeout({ exitCode: null, timedOut: true });
-        }
+    let onAbort: (() => void) | undefined;
+    // Killing the docker CLI alone leaves the container running, so both paths remove it first.
+    const stop = async () => {
+      try {
+        await this.backend.removeForce(containerName);
+      } finally {
+        process.kill();
+      }
+    };
+    const timeout = new Promise<{ exitCode: null; timedOut: true; cancelled: false }>((resolveTimeout) => {
+      timeoutHandle = setTimeout(() => {
+        void stop().finally(() => resolveTimeout({ exitCode: null, timedOut: true, cancelled: false }));
       }, timeoutMs);
+    });
+    const cancelled = new Promise<{ exitCode: null; timedOut: false; cancelled: true }>((resolveCancel) => {
+      if (signal === undefined) return;
+      onAbort = () => {
+        void stop().finally(() => resolveCancel({ exitCode: null, timedOut: false, cancelled: true }));
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
     });
 
     try {
       return await Promise.race([
-        process.exited.then((exitCode) => ({ exitCode, timedOut: false as const })),
+        process.exited.then((exitCode) => ({ exitCode, timedOut: false, cancelled: false })),
         timeout,
+        cancelled,
       ]);
     } finally {
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+      if (onAbort !== undefined) signal?.removeEventListener("abort", onAbort);
     }
   }
 

@@ -266,12 +266,26 @@ export async function runCli(
     if (planContext !== "") {
       runOptions.task = `${runOptions.task}\n\n${planContext}`;
     }
-    const result = await runAutonomousTask(runOptions, {
-      model,
-      onEvent: interactive
-        ? createTuiEventRenderer(stdout, { color: config.colorEnabled })
-        : createAgentEventRenderer(stdout, { color: config.colorEnabled }),
-    });
+    // First Ctrl+C stops the run cleanly (container removed, report written); a second one exits.
+    const cancellation = new AbortController();
+    const onInterrupt = () => {
+      if (cancellation.signal.aborted) process.exit(130);
+      stdout("\nCancelling: stopping the current step and writing the report. Press Ctrl+C again to exit now.");
+      cancellation.abort();
+    };
+    process.on("SIGINT", onInterrupt);
+    let result: Awaited<ReturnType<typeof runAutonomousTask>>;
+    try {
+      result = await runAutonomousTask(runOptions, {
+        model,
+        signal: cancellation.signal,
+        onEvent: interactive
+          ? createTuiEventRenderer(stdout, { color: config.colorEnabled })
+          : createAgentEventRenderer(stdout, { color: config.colorEnabled }),
+      });
+    } finally {
+      process.off("SIGINT", onInterrupt);
+    }
     stdout(interactive ? renderRunSummary(result, { color: config.colorEnabled }) : JSON.stringify(result, null, 2));
     await maybeOfferPatchApplication({
       interactive,
@@ -285,6 +299,7 @@ export async function runCli(
     if (result.status === "partial") return 3;
     if (result.status === "blocked") return 4;
     if (result.status === "budget_exhausted") return 5;
+    if (result.status === "cancelled") return 130;
     return 1;
   } catch (error) {
     if (error instanceof InteractiveRunCancelled) {

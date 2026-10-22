@@ -6,6 +6,8 @@ export interface CommandRequest {
   cwd?: string;
   timeoutMs?: number;
   env?: Record<string, string>;
+  /** Aborting stops and removes the container; the result is a runner_error. */
+  signal?: AbortSignal;
 }
 
 export type CommandStatus = "completed" | "timed_out" | "runner_error";
