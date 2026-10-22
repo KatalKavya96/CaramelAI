@@ -11,7 +11,6 @@ import { Navbar } from "./navigation/Navbar";
 import { LandingOverlays, type Overlay } from "./experience/LandingOverlays";
 import { useAppearance } from "./experience/useAppearance";
 import { Updates, WhatsNewPill, useUpdates } from "./experience/Updates";
-import { Faq } from "./experience/Faq";
 import styles from "./Landing.module.css";
 
 function Brand() {
@@ -101,7 +100,6 @@ export function Landing() {
       <section className={styles.providerSection} aria-labelledby="provider-title"><div><p className={styles.eyebrow}>Bring your own key</p><h2 id="provider-title" className={styles.featureTitle}>Your key. Your model.</h2><p className={styles.body}>Bring your own provider key. Choose the model that works for you and follow each run from task to patch.</p><a href={LINKS.docs} className={styles.textLink}>Explore the docs <span aria-hidden="true">↗</span></a></div><ProviderPreview /></section>
       <details id="example-replay" className={styles.replay}><summary><span><CheckIcon size={18} />Go deeper: replay an example run</span><span className={styles.summaryHint}>Verified and partial outcomes <span aria-hidden="true">+</span></span></summary><div className={styles.replayContent}><p>Hand-written examples demonstrate how the harness checks the work, including a run it refuses to verify.</p><RunReplay runs={RUNS} /></div></details>
       <Updates updates={updates} hasRelease={hasRelease} />
-      <Faq />
       <section className={styles.closing}><h2 className={styles.sectionTitle}>Start building with Caramel.</h2><p className={styles.sectionLead}>Agents that show their work. From issue to reviewed patch.</p><div className={styles.closingActions}><button type="button" className={styles.cta} onClick={() => setOverlay("quickstart")}>Open the quick-start guide <span aria-hidden="true">↗</span></button></div><Ctas hintId="closing-availability" /><p className={styles.releaseHint}>To hear when the desktop app ships, watch <a href={LINKS.notify}>GitHub releases</a>.</p></section>
     </main>
     <footer className={styles.footer}><Brand /><p>Built for work you can verify.</p><nav aria-label="Footer"><a href="#product">Product</a><a href="#how">How it works</a><a href={LINKS.docs}>Docs</a><a href={LINKS.github}>GitHub</a><button type="button" onClick={() => setOverlay("commands")}>Search & display options</button></nav></footer>

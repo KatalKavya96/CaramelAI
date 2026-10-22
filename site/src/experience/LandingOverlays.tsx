@@ -49,7 +49,6 @@ function CommandPalette({ openQuickStart,toggleTheme,theme,appearance,toggleAppe
     {id:"product",label:"Product demo",hint:"Try three example tasks",keywords:"preview bug refactor tests",href:"#product"},
     {id:"how",label:"How it works",hint:"From issue to evidence",keywords:"steps process",href:"#how"},
     {id:"example-replay",label:"Example runs",hint:"Verified and partial outcomes",keywords:"replay evidence",href:"#example-replay"},
-    {id:"faq",label:"Frequently asked questions",hint:"Providers, checks, and availability",keywords:"faq help",href:"#faq"},
     {id:"updates",label:"What's new",hint:"Development updates",keywords:"release news changelog",href:"#updates"},
     {id:"docs",label:"Documentation",hint:"Open on GitHub",keywords:"help readme",href:LINKS.docs},
     {id:"github",label:"GitHub repository",hint:"Explore the code",keywords:"source star",href:LINKS.github},
