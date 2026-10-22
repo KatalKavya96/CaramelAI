@@ -157,6 +157,21 @@ Shared-server rules: repositories only as `https://github.com/...` URLs, never h
 
 Routes (all under `/api`, JSON, session cookie): `GET/POST runs`, `GET runs/:id`, `POST runs/:id/cancel`, `GET runs/:id/events` (Server-Sent Events, resumable with `Last-Event-ID`), `GET runs/:id/patch`, `GET runs/:id/result` (status, verification evidence, metrics and usage without host paths; `404 not_ready` until the run ends), `GET providers`, `PUT/DELETE providers/:provider/key`, `POST providers/:provider/test`, `GET me`. A follow-up run is `POST runs` with `{parentRunId, task}`.
 
+## Desktop app backend (local mode)
+
+```bash
+bun run app            # starts on 127.0.0.1 and opens the browser
+bun run app --no-open  # for a desktop shell: read the CARAMEL_READY line instead
+```
+
+The same API as the web server, for one person on their own machine:
+
+- **Sign-in:** a random token per launch. Opening the printed URL swaps it for an HttpOnly cookie; API calls without it get 401. Requests whose `Host` is not `127.0.0.1:<port>` get 421, which stops DNS-rebinding pages.
+- **Repositories:** absolute local folders as well as git URLs. Runs work on a snapshot; `POST /api/runs/:id/apply` writes the patch into the real folder only if it applies cleanly, and reports conflicts or an already-applied patch otherwise.
+- **Network:** off by default; a run may ask for `"network": "full"`.
+- **Keys:** stored in the OS keychain (macOS Keychain, Windows Credential Manager, libsecret). Only the last four characters are written to `~/.caramel`.
+- **Sandbox:** the OS sandbox when available, otherwise Docker. `GET /api/me` reports the mode, sandbox, network choices, repository kinds and whether apply is available.
+
 ## Run artifacts
 
 Every initialized run keeps its artifacts outside the target repository:

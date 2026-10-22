@@ -9,16 +9,34 @@ import {
   RunNotFoundError,
   RunRequestError,
   testProviderKey,
-  type KeyStore,
+  type ProviderKeyStore,
   type KeyTestResult,
   type Provider,
   type RunService,
 } from "../service";
 import type { Authenticator } from "./auth";
 
+/** What this server can do, so one UI adapts to the hosted site and the desktop app. */
+export interface Capabilities {
+  mode: "hosted" | "local";
+  sandbox: string;
+  network: { default: "none" | "full"; choices: ("none" | "full")[] };
+  repoKinds: ("git" | "local")[];
+  /** POST /api/runs/:id/apply writes a local run's patch into the user's folder. */
+  canApply: boolean;
+}
+
+export const HOSTED_CAPABILITIES: Capabilities = {
+  mode: "hosted",
+  sandbox: "docker",
+  network: { default: "none", choices: ["none"] },
+  repoKinds: ["git"],
+  canApply: false,
+};
+
 export interface AppOptions {
   service: RunService;
-  keys: KeyStore;
+  keys: ProviderKeyStore;
   auth: Authenticator;
   runsRoot: string;
   /** The browser origin allowed to make state-changing requests, e.g. https://caramel.example.com */
@@ -29,6 +47,12 @@ export interface AppOptions {
   heartbeatMs?: number;
   /** Built web UI (web/dist). Served for GETs outside /api and /auth, with index.html as the SPA fallback. */
   staticDir?: string;
+  capabilities?: Capabilities;
+  /**
+   * Host headers this server answers to. A DNS-rebinding page reaches 127.0.0.1 under its own
+   * hostname, so on a local server anything but the expected host is refused before routing.
+   */
+  allowedHosts?: readonly string[];
 }
 
 /**
@@ -130,8 +154,13 @@ const TERMINAL = new Set(["verified", "partial", "blocked", "budget_exhausted", 
 export function createApp(options: AppOptions): (request: Request) => Promise<Response> {
   const testKey = options.testKey ?? ((provider, key) => testProviderKey(provider, key));
 
+  const capabilities = options.capabilities ?? HOSTED_CAPABILITIES;
+
   return async (request) => {
     try {
+      if (options.allowedHosts !== undefined && !options.allowedHosts.includes(request.headers.get("host") ?? "")) {
+        return fail(421, "bad_host");
+      }
       const extra = await options.extraRoutes?.(request);
       if (extra !== null && extra !== undefined) return extra;
 
@@ -156,6 +185,8 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
       const id = parts[1] ?? "";
 
       switch (route) {
+        case "GET me":
+          return json({ userId, ...(options.auth.profile?.(request) ?? {}), capabilities });
         case "GET runs":
           return json(options.service.list(userId));
         case "POST runs":
@@ -172,6 +203,9 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
           if (text === null) return fail(404, "not_ready");
           return json(clientResult(JSON.parse(text) as AgentRunResult));
         }
+        case "POST runs/:id/apply":
+          if (!capabilities.canApply) return fail(404, "not_found");
+          return json(await options.service.apply(userId, id));
         case "GET runs/:id/patch": {
           options.service.get(userId, id);
           const patch = await readFile(resolve(options.runsRoot, id, "output", "patch.diff"), "utf8").catch(() => null);
