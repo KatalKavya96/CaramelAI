@@ -96,6 +96,52 @@ describe("TaskMemory", () => {
   });
 });
 
+describe("TaskMemory context budget", () => {
+  function longRun(memory: TaskMemory, steps: number): void {
+    for (let index = 0; index < steps; index += 1) {
+      memory.recordDecision({ intent: `hypothesis ${index} `.repeat(8), action: { type: "read_file", path: `src/file-${index}.ts` } });
+      memory.recordObservation(
+        { type: "read_file", path: `src/file-${index}.ts` },
+        { ok: true, value: { path: `src/file-${index}.ts`, content: `marker-${index}\n${"x".repeat(2_000)}` } },
+      );
+    }
+  }
+
+  test("always shows the model the result of its latest action in long runs", () => {
+    const memory = new TaskMemory("system", "task", {}, { maxContextChars: 8_000, reserveResponseChars: 1_000 });
+    longRun(memory, 60);
+    const request = memory.request();
+    const chars = request.messages.reduce((total, message) => total + message.content.length, 0);
+    expect(chars).toBeLessThanOrEqual(7_000);
+    expect(request.messages.length).toBeGreaterThan(2);
+    expect(request.messages.at(-1)?.content).toContain("marker-59");
+  });
+
+  test("drops the oldest summary entries first and keeps the summary valid JSON", () => {
+    const memory = new TaskMemory("system", "task", {}, { maxContextChars: 8_000, reserveResponseChars: 1_000 });
+    longRun(memory, 60);
+    const summary = memory.request().messages[1]?.content ?? "";
+    expect(() => JSON.parse(summary)).not.toThrow();
+    expect(summary).toContain("src/file-59.ts");
+    expect(summary).not.toContain("src/file-0.ts");
+  });
+
+  test("keeps a huge task and a huge edit inside the budget without losing the latest observation", () => {
+    const memory = new TaskMemory("system", `start ${"t".repeat(100_000)} end-of-task`, {}, {
+      maxContextChars: 8_000,
+      reserveResponseChars: 1_000,
+    });
+    memory.recordDecision({ action: { type: "replace_file", path: "src/big.ts", content: "y".repeat(50_000) } });
+    memory.recordObservation({ type: "replace_file", path: "src/big.ts", content: "y".repeat(50_000) }, { ok: true, value: { changedFiles: ["src/big.ts"] } });
+    const request = memory.request();
+    const chars = request.messages.reduce((total, message) => total + message.content.length, 0);
+    expect(chars).toBeLessThanOrEqual(7_000);
+    expect(request.messages[1]?.content).toContain("start");
+    expect(request.messages[1]?.content).toContain("end-of-task");
+    expect(request.messages.at(-1)?.content).toContain("src/big.ts");
+  });
+});
+
 describe("RepositoryReadCache", () => {
   test("keys ranges and refuses a stale workspace fingerprint", () => {
     const cache = new RepositoryReadCache();
