@@ -1,4 +1,4 @@
-import type { CommandNetwork } from "../execution";
+import type { CommandNetwork, SandboxChoice } from "../execution";
 import type { ModelAction, ModelAdapter, ModelError } from "../model";
 import type { AgentEvent, AgentStatus, CommandExecutor } from "./types";
 
@@ -21,6 +21,10 @@ export interface AutonomousRunOptions {
   verificationCommands?: readonly string[];
   /** Network for target-repository commands. Defaults to "bridge"; "none" blocks exfiltration. */
   commandNetwork?: CommandNetwork;
+  /** Where commands run. Defaults to "auto": the OS sandbox when available, otherwise Docker. */
+  sandbox?: SandboxChoice;
+  /** Host paths a native sandbox must hide from commands. */
+  sandboxDenyRead?: readonly string[];
   apiKey?: string;
   /** Recorded in run_started when this run is a follow-up of an earlier run. */
   parentRunId?: string;

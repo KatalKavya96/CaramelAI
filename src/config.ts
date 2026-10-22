@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { type IssueFetcher, formatIssueTask } from "./issue";
+import { SANDBOX_CHOICES, type SandboxChoice } from "./execution/sandbox";
 
 export const DEFAULT_BUDGETS = {
   maxSteps: 120,
@@ -31,6 +32,7 @@ export interface RunConfig {
   /** Overrides the discovered checks that the completion gate trusts. */
   verificationCommands?: string[];
   commandNetwork: "bridge" | "none";
+  sandbox: SandboxChoice;
   colorEnabled: boolean;
   budgets: {
     maxSteps: number;
@@ -76,6 +78,7 @@ interface RunArguments {
   color?: string;
   verify?: string;
   network?: string;
+  sandbox?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -109,6 +112,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--color", "color"],
   ["--verify", "verify"],
   ["--network", "network"],
+  ["--sandbox", "sandbox"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -295,6 +299,11 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       : args.network === "none"
         ? "none"
         : (() => { throw new ConfigurationError("--network must be bridge or none."); })(),
+    sandbox: args.sandbox === undefined
+      ? "auto"
+      : (SANDBOX_CHOICES as readonly string[]).includes(args.sandbox)
+        ? args.sandbox as SandboxChoice
+        : (() => { throw new ConfigurationError("--sandbox must be auto, native or docker."); })(),
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

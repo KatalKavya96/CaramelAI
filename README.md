@@ -16,7 +16,7 @@ The harness includes bounded repository tools, Docker command execution, atomic 
 
 - Bun 1.3.x
 - GNU Make
-- Linux and Docker for target-repository command execution
+- A sandbox for target-repository commands: macOS (built-in Seatbelt), Linux with bubblewrap, or Docker
 
 ## Setup
 
@@ -175,6 +175,21 @@ Every initialized run keeps its artifacts outside the target repository:
 make test
 make check
 ```
+
+### Where commands run
+
+`--sandbox auto` (the default) runs target-repository commands in the operating system's sandbox when one is available, and otherwise in Docker:
+
+| | `native` (macOS Seatbelt, Linux bubblewrap) | `docker` |
+|---|---|---|
+| Setup | Nothing on macOS; `apt install bubblewrap` on Linux | Docker Desktop plus `make runner-image` |
+| Toolchain | The user's own Node, Python, etc. | The runner image's |
+| Writes | Only the run's workspace copy and a private HOME | Only the mounted workspace |
+| Reads | Everything except credential stores (`~/.ssh`, cloud CLIs, keychains, browser profiles) | Only the workspace |
+| Network | `--network none`: loopback only (on macOS, `localhost` stays reachable). `bridge`: full | `none` or `bridge` |
+| Resource limits | Time only | CPU, memory, processes, time |
+
+Commands never inherit the host environment, so model API keys stay out of reach. The shared web server always uses Docker, because an OS sandbox shares one kernel and user account between tenants. Windows has no native sandbox yet: use Docker Desktop or WSL2.
 
 Build and test the command-execution container when Docker is running:
 

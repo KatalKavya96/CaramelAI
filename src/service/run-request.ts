@@ -55,6 +55,8 @@ export interface RunRequestPolicy {
   ceilings: { maxSteps: number; maxMinutes: number; maxModelCalls: number };
   /** Network for target-repository commands; "none" on a shared server. */
   commandNetwork: "bridge" | "none";
+  /** Where commands run. A shared server uses Docker: OS sandboxes share one kernel and user between tenants. */
+  sandbox: "auto" | "native" | "docker";
 }
 
 export const SHARED_SERVER_POLICY: RunRequestPolicy = {
@@ -62,6 +64,7 @@ export const SHARED_SERVER_POLICY: RunRequestPolicy = {
   allowedGitHosts: ["github.com"],
   ceilings: { maxSteps: 120, maxMinutes: 30, maxModelCalls: 80 },
   commandNetwork: "none",
+  sandbox: "docker",
 };
 
 export class RunRequestError extends Error {

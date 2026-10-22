@@ -1,6 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { DockerCommandRunner } from "../execution";
+import { createSandboxedRunner } from "../execution";
 import { RepositoryReadCache, TaskMemory } from "../memory";
 import { SYSTEM_PROMPT } from "../prompts";
 import type { FailureRecord } from "../recovery";
@@ -60,10 +60,11 @@ export async function initializeRunContext(
   const commandExecutor = await (
     dependencies.createCommandExecutor ??
     (async (workspacePath: string, logsPath: string) =>
-      await DockerCommandRunner.create({
+      await createSandboxedRunner(options.sandbox ?? "auto", {
         workspacePath,
         logsPath,
         ...(options.commandNetwork === undefined ? {} : { network: options.commandNetwork }),
+        ...(options.sandboxDenyRead === undefined ? {} : { denyRead: options.sandboxDenyRead }),
       }))
   )(workspace.workspacePath, checksPath);
 

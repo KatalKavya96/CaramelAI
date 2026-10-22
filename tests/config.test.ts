@@ -46,6 +46,14 @@ describe("loadRunConfig", () => {
     await expect(loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it", "--network", "host"] })).rejects.toThrow(ConfigurationError);
   });
 
+  test("selects where commands run", async () => {
+    const cwd = await temporaryDirectory();
+    const base = { cwd, env: { AI_API_KEY: "secret" } };
+    expect((await loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it"] })).sandbox).toBe("auto");
+    expect((await loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it", "--sandbox", "docker"] })).sandbox).toBe("docker");
+    await expect(loadRunConfig({ ...base, argv: ["--repo", ".", "--task", "Fix it", "--sandbox", "none"] })).rejects.toThrow(ConfigurationError);
+  });
+
   test("accepts one explicit verification command", async () => {
     const cwd = await temporaryDirectory();
     const config = await loadRunConfig({
