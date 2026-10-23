@@ -1,7 +1,9 @@
 import { ApiError, apiErrorMessage, createApiClient } from "../src/data/api";
 import { parseUnifiedDiff } from "../src/lib/diff";
 import { dateGroup, describeAction, formatClock, formatDuration, repoLabel } from "../src/lib/format";
+import { findings, formatRate, formatUsd, parseScorecard } from "../src/lib/scorecard";
 import { isActive, isTerminal, statusCopy } from "../src/lib/status";
+import { SCORECARD } from "./fixtures/scorecard";
 import { SAMPLE_PATCH } from "./fixtures/events";
 
 describe("parseUnifiedDiff", () => {
@@ -67,5 +69,21 @@ describe("api client", () => {
     expect(seen?.method).toBe("POST");
     expect(seen?.credentials).toBe("same-origin");
     expect(new Headers(seen?.headers).get("content-type")).toMatch(/json/);
+  });
+});
+
+describe("scorecards", () => {
+  it("reads a scorecard and explains a wrong file", () => {
+    expect(parseScorecard(JSON.stringify(SCORECARD)).models).toHaveLength(2);
+    expect(() => parseScorecard("not json")).toThrow(/not JSON/);
+    expect(() => parseScorecard(JSON.stringify({ runs: [] }))).toThrow(/not a benchmark scorecard/);
+    expect(() => parseScorecard(JSON.stringify({ ...SCORECARD, schemaVersion: 2 }))).toThrow(/format 2/);
+  });
+  it("puts false successes first and ignores skipped runs", () => {
+    const flagged = findings(SCORECARD.runs);
+    expect(flagged.map(({ run, finding }) => [run.model, run.taskId, finding])).toEqual([["x-ai/grok-4", "py-not-a-bug", "false_success"]]);
+  });
+  it("formats rates and money", () => {
+    expect([formatRate(null), formatRate(0.666), formatUsd(0), formatUsd(0.004), formatUsd(1.5)]).toEqual(["–", "67%", "$0", "$0.0040", "$1.50"]);
   });
 });

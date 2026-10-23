@@ -14,6 +14,7 @@ export type { KeyTestResult, Provider, ProviderKeyView } from "@core/service/key
 export type { FollowUpRequest, RepoSource } from "@core/service/run-request";
 export type { VerificationEvidence } from "@core/verification/types";
 export type { ModelAction } from "@core/model/types";
+export type { AgentRunRecord, ModelSummary, RunOutcome, Scorecard } from "@core/benchmark/agent-runs";
 
 /** GET /api/runs/:id/result */
 export type RunResultView = ReturnType<typeof clientResult>;
