@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,16 +8,16 @@
     <link rel="icon" type="image/svg+xml" href="/caramel.svg" />
     <title>Caramel: agents that show their work</title>
     <script>
-      // Fresh openings start dark. A refresh alone preserves this tab's theme choice.
+      // Fresh openings start light. A refresh alone preserves this tab's theme choice.
       try {
         var navigation = performance.getEntriesByType("navigation")[0];
         var refreshing = navigation && navigation.type === "reload";
         var saved = refreshing ? sessionStorage.getItem("caramel-site-theme") : null;
-        var theme = saved === "light" ? "light" : "dark";
+        var theme = saved === "dark" ? "dark" : "light";
         document.documentElement.dataset.theme = theme;
         sessionStorage.setItem("caramel-site-theme", theme);
       } catch (e) {
-        document.documentElement.dataset.theme = "dark";
+        document.documentElement.dataset.theme = "light";
       }
     </script>
   </head>

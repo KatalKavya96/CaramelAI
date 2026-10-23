@@ -4,7 +4,7 @@ const html = readFileSync("index.html", "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 if (!script) throw new Error("The before-paint theme script is missing.");
 function openPage(type: string, saved: string | null, blocked = false) {
-  const document = { documentElement: { dataset: { theme: "dark" } } };
+  const document = { documentElement: { dataset: { theme: "light" } } };
   const storage = new Map(saved ? [["caramel-site-theme", saved]] : []);
   runInNewContext(script as string, {
     document,
@@ -17,17 +17,17 @@ function openPage(type: string, saved: string | null, blocked = false) {
   return document.documentElement.dataset.theme;
 }
 describe("Landing page theme on opening", () => {
-  it("starts fresh openings dark even if the previous tab was light", () => {
-    expect(openPage("navigate", null)).toBe("dark");
-    expect(openPage("navigate", "light")).toBe("dark");
-    expect(openPage("back_forward", "light")).toBe("dark");
+  it("starts fresh openings light even if the previous tab was dark", () => {
+    expect(openPage("navigate", null)).toBe("light");
+    expect(openPage("navigate", "dark")).toBe("light");
+    expect(openPage("back_forward", "dark")).toBe("light");
   });
   it("preserves the current tab choice on refresh", () => {
     expect(openPage("reload", "light")).toBe("light");
     expect(openPage("reload", "dark")).toBe("dark");
   });
-  it("stays dark when storage is blocked or has no choice", () => {
-    expect(openPage("reload", null)).toBe("dark");
-    expect(openPage("reload", "light", true)).toBe("dark");
+  it("stays light when storage is blocked or has no choice", () => {
+    expect(openPage("reload", null)).toBe("light");
+    expect(openPage("reload", "dark", true)).toBe("light");
   });
 });
