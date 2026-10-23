@@ -63,7 +63,7 @@ describe("StructuredModelAdapter", () => {
     const delays: number[] = [];
     const adapter = new StructuredModelAdapter(
       transport,
-      { maxAttempts: 3, initialBackoffMs: 10, maxBackoffMs: 20 },
+      { maxAttempts: 3, initialBackoffMs: 10, maxBackoffMs: 20, rateLimitBackoffMs: [] },
       {
         sleep: async (delay) => {
           delays.push(delay);
@@ -75,6 +75,33 @@ describe("StructuredModelAdapter", () => {
     expect(result.decision.action.type).toBe("list_files");
     expect(transport.calls).toBe(3);
     expect(delays).toEqual([10, 20]);
+  });
+
+  test("waits seconds, not milliseconds, after a rate limit with no Retry-After", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("rate_limit", "pool busy"),
+      new ModelTransportError("rate_limit", "pool busy"),
+      new ModelTransportError("rate_limit", "pool busy"),
+      SUCCESS,
+    ]);
+    const delays: number[] = [];
+    const adapter = new StructuredModelAdapter(transport, { maxAttempts: 3 }, { sleep: async (delay) => { delays.push(delay); } });
+    const result = await adapter.complete(REQUEST);
+    expect(result.decision.action.type).toBe("list_files");
+    // A shared free pool needs time to refill, and gets one more try than other errors.
+    expect(delays).toEqual([5_000, 15_000, 30_000]);
+    expect(transport.calls).toBe(4);
+  });
+
+  test("other errors keep the short schedule and the normal attempt limit", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("transient", "gateway"),
+      new ModelTransportError("transient", "gateway"),
+      new ModelTransportError("transient", "gateway"),
+      SUCCESS,
+    ]);
+    const adapter = new StructuredModelAdapter(transport, { maxAttempts: 3 }, { sleep: async () => {} });
+    await expect(adapter.complete(REQUEST)).rejects.toMatchObject({ kind: "transport", attempts: 3 });
   });
 
   test("does not retry authentication errors", async () => {

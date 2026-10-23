@@ -84,6 +84,12 @@ export interface ModelAdapterOptions {
   requestTimeoutMs?: number;
   initialBackoffMs?: number;
   maxBackoffMs?: number;
+  /**
+   * Waits after a rate limit that gave no Retry-After. Exponential backoff in milliseconds suits a
+   * flaky connection, not a shared free pool that refills over seconds, so rate limits get their
+   * own, longer schedule, and one more attempt per entry when that exceeds maxAttempts.
+   */
+  rateLimitBackoffMs?: readonly number[];
 }
 
 interface AdapterDependencies {
@@ -96,6 +102,7 @@ const DEFAULT_OPTIONS = {
   requestTimeoutMs: 30_000,
   initialBackoffMs: 250,
   maxBackoffMs: 2_000,
+  rateLimitBackoffMs: [5_000, 15_000, 30_000] as readonly number[],
 } as const;
 
 function positiveInteger(value: number, name: string): number {
@@ -202,6 +209,8 @@ export class StructuredModelAdapter implements ModelAdapter {
         options.maxBackoffMs ?? DEFAULT_OPTIONS.maxBackoffMs,
         "maxBackoffMs",
       ),
+      rateLimitBackoffMs: (options.rateLimitBackoffMs ?? DEFAULT_OPTIONS.rateLimitBackoffMs)
+        .map((delay) => nonNegativeInteger(delay, "rateLimitBackoffMs")),
     };
     this.now = dependencies.now ?? Date.now;
     this.sleep = dependencies.sleep ?? ((milliseconds) => Bun.sleep(milliseconds));
@@ -229,7 +238,9 @@ export class StructuredModelAdapter implements ModelAdapter {
       return error;
     };
 
-    for (let attempt = 1; attempt <= this.options.maxAttempts; attempt += 1) {
+    const rateLimitAttempts = Math.max(this.options.maxAttempts, this.options.rateLimitBackoffMs.length + 1);
+    let rateLimits = 0;
+    for (let attempt = 1; attempt <= rateLimitAttempts; attempt += 1) {
       if (budget.signal?.aborted === true) throw withWasted(cancelledError(attempt - 1));
       const remainingMs = this.remainingBudget(startedAt, budget.remainingTimeMs);
       if (remainingMs !== undefined && remainingMs <= 0) {
@@ -253,12 +264,18 @@ export class StructuredModelAdapter implements ModelAdapter {
       } catch (error) {
         const modelError = withWasted(errorFromTransport(error, attempt));
         lastError = modelError;
-        if (!modelError.retryable || attempt === this.options.maxAttempts) throw modelError;
+        const rateLimited = modelError.kind === "rate_limit";
+        const limit = rateLimited ? rateLimitAttempts : this.options.maxAttempts;
+        if (!modelError.retryable || attempt >= limit) throw modelError;
         wasted = modelError.usage;
 
+        const schedule = this.options.rateLimitBackoffMs;
         const delay = modelError.retryAfterMs !== undefined
           ? Math.min(modelError.retryAfterMs, MAX_RETRY_AFTER_MS)
-          : Math.min(this.options.initialBackoffMs * 2 ** (attempt - 1), this.options.maxBackoffMs);
+          : rateLimited && schedule.length > 0
+            ? schedule[Math.min(rateLimits, schedule.length - 1)]!
+            : Math.min(this.options.initialBackoffMs * 2 ** (attempt - 1), this.options.maxBackoffMs);
+        if (rateLimited) rateLimits += 1;
         const remainingAfterAttempt = this.remainingBudget(startedAt, budget.remainingTimeMs);
         if (remainingAfterAttempt !== undefined && remainingAfterAttempt <= delay) {
           throw withWasted(new ModelError(
