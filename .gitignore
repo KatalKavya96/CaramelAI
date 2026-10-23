@@ -5,3 +5,10 @@ coverage/
 *.log
 .DS_Store
 .caramel-data/
+
+# Local delivery bundles and generated output
+caramel-commits/
+*.tsbuildinfo
+.env.*
+!.env.example
+.vite/
