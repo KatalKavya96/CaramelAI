@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "cd .. && NODE_ENV=development bun install --frozen-lockfile && cd web && npm ci --include=dev",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/setup", "destination": "/index.html" },
+    { "source": "/repos", "destination": "/index.html" },
+    { "source": "/benchmarks", "destination": "/index.html" },
+    { "source": "/runs/:path*", "destination": "/index.html" }
+  ]
+}

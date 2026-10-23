@@ -1,0 +1,434 @@
+{
+  "id": "example-verified",
+  "label": "Verified",
+  "provenance": "example",
+  "repoUrl": "https://github.com/example/date-utils",
+  "model": "deepseek-flash",
+  "status": "verified",
+  "summary": "parseDate now treats a bare YYYY-MM-DD as UTC midnight, so it no longer shifts a day in negative-offset timezones. npm test passes on the final code.",
+  "terminationReason": "Model requested finish with successful verification for the final code state.",
+  "events": [
+    {
+      "schemaVersion": 1,
+      "sequence": 1,
+      "timestamp": "2026-10-22T10:00:00.000Z",
+      "type": "run_started",
+      "payload": {
+        "runId": "example-verified",
+        "task": "parseDate returns the previous day for ISO dates in timezones west of UTC",
+        "sourceRepo": "https://github.com/example/date-utils",
+        "workspacePath": "<workspace>",
+        "budgets": {
+          "maxSteps": 120,
+          "maxMinutes": 60,
+          "maxModelCalls": 80
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 2,
+      "timestamp": "2026-10-22T10:00:02.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Find where dates are parsed",
+        "action": {
+          "type": "search",
+          "query": "parseDate"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 3,
+      "timestamp": "2026-10-22T10:00:02.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 1,
+        "action": {
+          "type": "search",
+          "query": "parseDate"
+        },
+        "intent": "Find where dates are parsed"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 4,
+      "timestamp": "2026-10-22T10:00:02.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "search",
+        "workspaceChanged": false,
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 5,
+      "timestamp": "2026-10-22T10:00:05.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Read the parser",
+        "action": {
+          "type": "read_file",
+          "path": "src/date.ts"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 6,
+      "timestamp": "2026-10-22T10:00:05.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 2,
+        "action": {
+          "type": "read_file",
+          "path": "src/date.ts"
+        },
+        "intent": "Read the parser"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 7,
+      "timestamp": "2026-10-22T10:00:05.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "read_file",
+        "workspaceChanged": false,
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 8,
+      "timestamp": "2026-10-22T10:00:08.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "See what the tests already cover",
+        "action": {
+          "type": "read_file",
+          "path": "test/date.test.ts"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 9,
+      "timestamp": "2026-10-22T10:00:08.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 3,
+        "action": {
+          "type": "read_file",
+          "path": "test/date.test.ts"
+        },
+        "intent": "See what the tests already cover"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 10,
+      "timestamp": "2026-10-22T10:00:08.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "read_file",
+        "workspaceChanged": false,
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 11,
+      "timestamp": "2026-10-22T10:00:12.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Reproduce the bug before changing anything",
+        "action": {
+          "type": "run_command",
+          "command": "npm test",
+          "purpose": "agent"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 12,
+      "timestamp": "2026-10-22T10:00:12.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 4,
+        "action": {
+          "type": "run_command",
+          "command": "npm test",
+          "purpose": "agent"
+        },
+        "intent": "Reproduce the bug before changing anything"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 13,
+      "timestamp": "2026-10-22T10:00:12.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "run_command",
+        "workspaceChanged": false,
+        "result": {
+          "ok": false,
+          "exitCode": 1,
+          "durationMs": 6100,
+          "stdout": {
+            "preview": "date.test.ts\n  ✓ parses full timestamps\n  ✗ parses a bare ISO date as UTC midnight\n    expected 1, received 31\n\n1 failed, 11 passed",
+            "previewTruncated": false
+          },
+          "stderr": {
+            "preview": "",
+            "previewTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 14,
+      "timestamp": "2026-10-22T10:00:21.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Parse bare dates as UTC midnight",
+        "action": {
+          "type": "replace_text",
+          "path": "src/date.ts",
+          "search": "return new Date(input);",
+          "replacement": "return new Date(`${input}T00:00:00Z`);"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 15,
+      "timestamp": "2026-10-22T10:00:21.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 5,
+        "action": {
+          "type": "replace_text",
+          "path": "src/date.ts",
+          "search": "return new Date(input);",
+          "replacement": "return new Date(`${input}T00:00:00Z`);"
+        },
+        "intent": "Parse bare dates as UTC midnight"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 16,
+      "timestamp": "2026-10-22T10:00:21.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "replace_text",
+        "workspaceChanged": true,
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 17,
+      "timestamp": "2026-10-22T10:00:24.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Done",
+        "action": {
+          "type": "finish",
+          "summary": "Fixed parseDate"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 18,
+      "timestamp": "2026-10-22T10:00:24.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "finish",
+        "workspaceChanged": false,
+        "result": {
+          "ok": false,
+          "error": "Finish rejected: Review the final changes with inspect_diff. Run a trusted verification command on the final code and make it pass: npm test."
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 19,
+      "timestamp": "2026-10-22T10:00:27.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Run the project's own tests on the final code",
+        "action": {
+          "type": "run_command",
+          "command": "npm test",
+          "purpose": "verification"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 20,
+      "timestamp": "2026-10-22T10:00:27.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 6,
+        "action": {
+          "type": "run_command",
+          "command": "npm test",
+          "purpose": "verification"
+        },
+        "intent": "Run the project's own tests on the final code"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 21,
+      "timestamp": "2026-10-22T10:00:27.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "run_command",
+        "workspaceChanged": false,
+        "result": {
+          "ok": true,
+          "exitCode": 0,
+          "durationMs": 6400,
+          "stdout": {
+            "preview": "date.test.ts\n  ✓ parses full timestamps\n  ✓ parses a bare ISO date as UTC midnight\n\n12 passed",
+            "previewTruncated": false
+          },
+          "stderr": {
+            "preview": "",
+            "previewTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 22,
+      "timestamp": "2026-10-22T10:00:36.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Review the final diff",
+        "action": {
+          "type": "inspect_diff"
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 23,
+      "timestamp": "2026-10-22T10:00:36.000Z",
+      "type": "step_started",
+      "payload": {
+        "step": 7,
+        "action": {
+          "type": "inspect_diff"
+        },
+        "intent": "Review the final diff"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 24,
+      "timestamp": "2026-10-22T10:00:36.000Z",
+      "type": "tool_result",
+      "payload": {
+        "action": "inspect_diff",
+        "workspaceChanged": false,
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 25,
+      "timestamp": "2026-10-22T10:00:39.000Z",
+      "type": "model_decision",
+      "payload": {
+        "intent": "Finish",
+        "action": {
+          "type": "finish",
+          "summary": "parseDate now treats a bare YYYY-MM-DD as UTC midnight, so it no longer shifts a day in negative-offset timezones. npm test passes on the final code."
+        }
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "sequence": 26,
+      "timestamp": "2026-10-22T10:00:40.000Z",
+      "type": "run_finished",
+      "payload": {
+        "status": "verified",
+        "terminationReason": "Model requested finish with successful verification for the final code state.",
+        "changedFiles": [
+          "src/date.ts"
+        ],
+        "successfulFinalState": true
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e1",
+      "codeFingerprint": "base",
+      "command": "npm test",
+      "cwd": ".",
+      "status": "failed",
+      "exitCode": 1,
+      "durationMs": 6100,
+      "timeoutMs": 600000,
+      "testCounts": {
+        "passed": 11,
+        "failed": 1,
+        "skipped": 0,
+        "total": 12
+      },
+      "baseline": true,
+      "trusted": true
+    },
+    {
+      "id": "e2",
+      "codeFingerprint": "final",
+      "command": "npm test",
+      "cwd": ".",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 6400,
+      "timeoutMs": 600000,
+      "testCounts": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0,
+        "total": 12
+      },
+      "baseline": false,
+      "trusted": true
+    }
+  ],
+  "patch": "diff --git a/src/date.ts b/src/date.ts\n--- a/src/date.ts\n+++ b/src/date.ts\n@@ -1,4 +1,5 @@\n export function parseDate(input: string): Date {\n-  return new Date(input);\n+  // A bare YYYY-MM-DD is a calendar date: pin it to UTC midnight so local offsets can't shift it.\n+  return new Date(`${input}T00:00:00Z`);\n }\n",
+  "metrics": {
+    "steps": 7,
+    "modelCalls": 9,
+    "commandsRun": 2,
+    "durationMs": 40000
+  }
+}
