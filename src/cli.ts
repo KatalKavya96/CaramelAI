@@ -206,6 +206,7 @@ export async function runCli(
         task: config.task,
         repositoryContext: await planRepositoryContext(config.repoPath, config.task),
       });
+      runOptions.priorUsage = planResult.usage;
       if (planResult.skippedReason !== undefined) {
         stdout(`\n⚠️  Plan generation skipped: ${planResult.skippedReason}\n`);
       }

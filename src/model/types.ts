@@ -58,12 +58,15 @@ export type ModelUsage =
 export interface ModelTurn {
   decision: ModelDecision;
   usage: ModelUsage;
+  /** Usage of earlier attempts in this call that the provider answered but that failed and were retried. */
+  wastedUsage?: ModelUsage[];
 }
 
 /** Raw model text plus usage, for callers that validate the output themselves (plan mode). */
 export interface TextTurn {
   output: string;
   usage: ModelUsage;
+  wastedUsage?: ModelUsage[];
 }
 
 export interface CompletionBudget {

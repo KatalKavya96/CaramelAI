@@ -40,6 +40,7 @@ export async function executeModelTurn(
     }).finally(() => {
       usage.modelTimeMs += Math.round(performance.now() - startedAt);
     });
+    for (const spent of turn.wastedUsage ?? []) recordUsage(usage, spent);
     recordUsage(usage, turn.usage);
     await events.write("model_decision", turn.decision);
     memory.recordDecision(turn.decision);
@@ -49,6 +50,8 @@ export async function executeModelTurn(
       error instanceof ModelError
         ? error
         : new ModelError("transport", error instanceof Error ? error.message : String(error), false, 1, { cause: error });
+    // A failed call can still have been billed (e.g. an unparseable reply).
+    for (const spent of modelError.usage) recordUsage(usage, spent);
 
     await events.write("model_error", {
       kind: modelError.kind,
