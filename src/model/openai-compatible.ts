@@ -28,6 +28,9 @@ function statusCode(error: unknown): number | undefined {
  * so a fix to error mapping or usage parsing lands for every provider that speaks this API.
  */
 export class OpenAICompatibleTransport implements ModelTransport {
+  /** Set once a server rejects json_schema; later calls ask for plain JSON instead. */
+  private jsonObjectOnly = false;
+
   constructor(
     private readonly client: ChatCompletionsClient,
     private readonly model: string,
@@ -41,18 +44,27 @@ export class OpenAICompatibleTransport implements ModelTransport {
         description: "Exactly one validated coding-harness action.",
         schema: MODEL_DECISION_SCHEMA,
       };
-      // No temperature: reasoning models on both APIs reject anything but the default.
-      const response = await this.client.chat.completions.create({
+      const send = () => this.client.chat.completions.create({
         model: this.model,
         messages: request.messages.map(({ role, content }) => ({ role, content })),
         // Non-strict: strict mode needs every field required, and the decision schema has optional
         // fields. The schema still guides the model; the zod parser stays the real gate.
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: format.name, description: format.description, schema: format.schema, strict: false },
-        },
+        response_format: this.jsonObjectOnly
+          ? { type: "json_object" }
+          : { type: "json_schema", json_schema: { name: format.name, description: format.description, schema: format.schema, strict: false } },
         stream: false,
       }, { signal });
+      // No temperature: reasoning models on both APIs reject anything but the default.
+      let response: unknown;
+      try {
+        response = await send();
+      } catch (error) {
+        // Some OpenAI-compatible servers (older local runtimes) only know json_object.
+        const message = error instanceof Error ? error.message : "";
+        if (this.jsonObjectOnly || statusCode(error) !== 400 || !/response_format|json_schema/i.test(message)) throw error;
+        this.jsonObjectOnly = true;
+        response = await send();
+      }
       if (typeof response !== "object" || response === null || !("choices" in response)) {
         throw new ModelTransportError("permanent", `${this.providerName} returned an invalid chat response.`);
       }
@@ -98,11 +110,12 @@ function createCompatibleModel(
   baseURL: string,
   defaultModel: string,
   providerName: string,
+  requestTimeoutMs = 120_000,
 ): ModelAdapter {
   const client = options.client ?? (new OpenAI({ apiKey: options.apiKey, baseURL, maxRetries: 0 }) as unknown as ChatCompletionsClient);
   return new StructuredModelAdapter(
     new OpenAICompatibleTransport(client, options.model ?? defaultModel, providerName),
-    { requestTimeoutMs: 120_000, maxAttempts: 3 },
+    { requestTimeoutMs, maxAttempts: 3 },
   );
 }
 
@@ -112,4 +125,12 @@ export function createOpenAIModel(options: { apiKey: string; model?: string; cli
 
 export function createXaiModel(options: { apiKey: string; model?: string; client?: ChatCompletionsClient }): ModelAdapter {
   return createCompatibleModel(options, XAI_BASE_URL, DEFAULT_XAI_MODEL, "xAI");
+}
+
+/**
+ * Any server that speaks OpenAI's Chat Completions API: Ollama, LM Studio, vLLM, Groq, Together
+ * and most new labs. Local models can be slow on a laptop, so calls get a longer timeout.
+ */
+export function createCustomModel(options: { apiKey: string; baseUrl: string; model: string; client?: ChatCompletionsClient }): ModelAdapter {
+  return createCompatibleModel(options, options.baseUrl, options.model, "Custom endpoint", 300_000);
 }

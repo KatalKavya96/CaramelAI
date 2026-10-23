@@ -175,4 +175,17 @@ describe("local desktop server", () => {
     // Any other path on localhost is still refused by the Host check.
     expect((await call("/api/me", { headers: { host: `localhost:${port}`, ...auth } })).status).toBe(421);
   });
+
+  test("a custom endpoint is saved with its URL, and the key stays optional", async () => {
+    const { server, call } = await launch();
+    const auth = { authorization: `Bearer ${server.token}` };
+    const saved = await call("/api/providers/custom/key", { method: "PUT", headers: auth, body: JSON.stringify({ baseUrl: "http://localhost:11434/v1/" }) });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ provider: "custom", endpoint: "http://localhost:11434/v1", last4: "none" });
+    const listed = (await (await call("/api/providers", { headers: auth })).json()) as { provider: string; endpoint: string | null }[];
+    expect(listed.find(({ provider }) => provider === "custom")?.endpoint).toBe("http://localhost:11434/v1");
+    // Over plain http to another machine the key would travel in clear text.
+    const refused = await call("/api/providers/custom/key", { method: "PUT", headers: auth, body: JSON.stringify({ baseUrl: "http://10.0.0.5/v1", key: "secret-key" }) });
+    expect(refused.status).toBe(400);
+  });
 });

@@ -119,6 +119,14 @@ describe("HTTP API", () => {
     expect((await call("PUT", "/api/providers/claude/key", { user: "token-a", body: { key: "x" } })).status).toBe(404);
   });
 
+  test("a shared server hides custom endpoints: it must not fetch URLs its users choose", async () => {
+    const { call } = await setup();
+    const put = await call("PUT", "/api/providers/custom/key", { user: "token-a", body: { baseUrl: "https://169.254.169.254/latest" } });
+    expect(put.status).toBe(404);
+    const listed = (await (await call("GET", "/api/providers", { user: "token-a" })).json()) as { provider: string }[];
+    expect(listed.map(({ provider }) => provider)).not.toContain("custom");
+  });
+
   test("starts a run, streams resumable SSE, serves the patch and hides it from other users", async () => {
     const { call } = await setup();
     await call("PUT", "/api/providers/openrouter/key", { user: "token-a", body: { key: "sk-or-v1-abcdgood" } });

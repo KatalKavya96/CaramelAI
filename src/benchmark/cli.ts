@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { SANDBOX_CHOICES, type SandboxChoice } from "../execution";
-import { isProvider, PROVIDER_INFO } from "../model/providers";
+import { credentialFromEnv, isProvider, PROVIDER_INFO } from "../model/providers";
 import { runAgentBenchmark } from "./agent-runs";
 import { renderBenchmarkDashboard } from "./dashboard";
 import { evaluatePatch, readPatch } from "./runner";
@@ -32,8 +32,9 @@ async function runAgentCommand(args: readonly string[], env: Record<string, stri
   const provider = optional(args, "--provider") ?? "openrouter";
   if (!isProvider(provider)) throw new Error(`Unknown provider: ${provider}`);
   const info = PROVIDER_INFO[provider];
-  const apiKey = env[info.keyEnv];
-  if (apiKey === undefined || apiKey.trim() === "") throw new Error(`Set ${info.keyEnv} to your ${info.label} key first.`);
+  const apiKey = credentialFromEnv(provider, env);
+  if (apiKey === undefined) throw new Error(provider === "custom" ? "Set CUSTOM_BASE_URL (and CUSTOM_API_KEY if it needs one) first." : `Set ${info.keyEnv} to your ${info.label} key first.`);
+  if (provider === "custom" && optional(args, "--models") === undefined) throw new Error("A custom endpoint needs --models.");
   const sandbox = optional(args, "--sandbox") ?? "auto";
   if (!SANDBOX_CHOICES.includes(sandbox as SandboxChoice)) throw new Error(`--sandbox must be one of: ${SANDBOX_CHOICES.join(", ")}`);
   const list = (value: string | undefined) => value?.split(",").map((item) => item.trim()).filter((item) => item !== "");
