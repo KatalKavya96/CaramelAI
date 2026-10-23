@@ -1,0 +1,16 @@
+diff --git a/tests/test_amounts.py b/tests/test_amounts.py
+index 3a7d06b..adbf2f9 100644
+--- a/tests/test_amounts.py
++++ b/tests/test_amounts.py
+@@ -13,6 +13,11 @@ class ParseAmountTest(unittest.TestCase):
+     def test_dollar_sign(self):
+         self.assertEqual(parse_amount("$19.99"), 1999)
+ 
++    def test_thousands_separator(self):
++        # Regression test for #212: "1,234.50" used to raise decimal.InvalidOperation.
++        self.assertEqual(parse_amount("1,234.50"), 123450)
++        self.assertEqual(parse_amount("(1,450.00)"), -145000)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

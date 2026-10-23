@@ -1,0 +1,10 @@
+{
+  "name": "tillroll",
+  "version": "0.3.2",
+  "private": true,
+  "description": "Prints café receipts from a cart file.",
+  "scripts": {
+    "receipt": "bun run src/cli.ts",
+    "test": "bun test ./test"
+  }
+}

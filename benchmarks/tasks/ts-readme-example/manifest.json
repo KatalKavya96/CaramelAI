@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-readme-example",
+  "title": "README examples don't match the code",
+  "language": "typescript",
+  "split": "development",
+  "issue": "README examples don't match what slugify returns\n\nI copied the second example from the README:\n\n```ts\nslugify(\"Crème Brûlée Recipe\", { sep: \"_\" });\n// => \"creme_brulee_recipe\"\n```\n\nbut I get `\"creme-brulee-recipe\"`: the underscore is ignored. The `maxLength` example doesn't match either (I get `\"a-very-long-blog\"`, not `\"a-very-long-blog-pos\"`).\n\nSo is the README wrong or is the code wrong? Please fix whichever one it is.",
+  "fixtureSha256": "287bd0ebfbacbe3baf1f17fc5c90f04c2ffdc0c5c3b1c83b4d6457811948f48b",
+  "evaluatorSha256": "13a8e6490595224e8378b41d4216f7a591bde42a3401726a6ae76124f5070e2f",
+  "solutionSha256": "07bef246b0d53689e4f1349c19c9d352737a9b3c23ec02c65d81f37cdab44163",
+  "setup": [],
+  "checks": [
+    {
+      "name": "README examples run as promised",
+      "kind": "task",
+      "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "bun run test",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 12,
+    "maxMinutes": 6,
+    "maxModelCalls": 12
+  }
+}
