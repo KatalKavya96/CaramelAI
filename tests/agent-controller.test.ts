@@ -167,6 +167,24 @@ async function runWithScript(options: {
 }
 
 describe("autonomous agent vertical slice", () => {
+  test("a repository with no test, build or lint command finishes partial and says why", async () => {
+    const source = await temporaryDirectory("dinner-agent-nochecks-");
+    git(source, ["init", "-q"]);
+    await writeFile(join(source, "math.ts"), "export const add = (a: number, b: number) => a - b;\n");
+    git(source, ["add", "."]);
+    git(source, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"]);
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "replace_text", path: "math.ts", search: "a - b", replacement: "a + b" }, "fix"),
+        turn({ type: "inspect_diff" }, "review"),
+        ...finishUntilAccepted("Fixed add."),
+      ],
+    });
+    expect(result.status).toBe("partial");
+    expect(result.terminationReason).toContain("No verification available");
+  });
+
   test("inspects, patches, verifies, finishes, and exports evidence", async () => {
     const source = await codingFixture();
     const { result, model } = await runWithScript({
@@ -189,6 +207,9 @@ describe("autonomous agent vertical slice", () => {
     expect(result.verification).toMatchObject({ commandsRun: 1, successfulFinalState: true });
     expect(result.metrics).toMatchObject({ steps: 5, modelCalls: 6 });
     expect(model.requests).toHaveLength(6);
+    // Host paths never reach the model: it is told the root is "." and works in relative paths.
+    const prompts = model.requests.flatMap((request) => request.messages.map((message) => message.content)).join("\n");
+    expect(prompts).not.toContain(result.workspacePath);
     expect(await readFile(join(source, "src", "math.ts"), "utf8")).toContain("a - b");
     expect(await readFile(result.patchPath, "utf8")).toContain("return a + b");
     expect(JSON.parse(await readFile(result.resultPath, "utf8"))).toMatchObject({

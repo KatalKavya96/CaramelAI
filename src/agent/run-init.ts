@@ -85,7 +85,10 @@ export async function initializeRunContext(
       ? "No trusted verification command is configured, so this run cannot finish as verified. Still run the most relevant tests and report the result."
       : "Only these exact commands, run from the workspace root with purpose verification, can verify the final state. Editing the file that defines a command (such as package.json scripts) makes it untrusted.",
   };
-  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks, verificationGate, repositoryMap }, {
+  // The model works in repository-relative paths; the host path of the workspace only tempts it
+  // to pass absolute paths, which the repository tools refuse.
+  const promptMetadata = metadata.ok ? { ...metadata, value: { ...metadata.value, rootPath: "." } } : metadata;
+  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata: promptMetadata, discoveredChecks, verificationGate, repositoryMap }, {
     ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
   });
 
