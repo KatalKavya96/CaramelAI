@@ -41,6 +41,7 @@ describe("plan mode", () => {
     expect(plan.summary).toBe(PLAN.summary);
     expect(plan.questions[0]?.options[0]).toBe("client.ts (recommended)");
     expect(plan.skippedReason).toBeUndefined();
+    expect(plan.usage).toHaveLength(1);
     const format = transport.requests[0]?.responseFormat;
     expect(format?.name).toBe("caramel_plan");
     expect(JSON.stringify(format?.schema)).toContain("questions");

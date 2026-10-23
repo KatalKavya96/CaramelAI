@@ -20,17 +20,23 @@ export type ModelErrorKind =
 export class ModelError extends Error {
   /** How long the provider asked us to wait before retrying (from Retry-After), if it said. */
   readonly retryAfterMs: number | undefined;
+  /**
+   * Usage of attempts the provider answered but that still failed (an unparseable reply is
+   * billed like any other). Filled in by the adapter so failed calls still count toward cost.
+   */
+  usage: ModelUsage[] = [];
 
   constructor(
     public readonly kind: ModelErrorKind,
     message: string,
     public readonly retryable: boolean,
     public readonly attempts: number,
-    options?: ErrorOptions & { retryAfterMs?: number | undefined },
+    options?: ErrorOptions & { retryAfterMs?: number | undefined; usage?: ModelUsage | undefined },
   ) {
     super(message, options);
     this.name = "ModelError";
     this.retryAfterMs = options?.retryAfterMs;
+    if (options?.usage !== undefined) this.usage.push(options.usage);
   }
 }
 
@@ -151,25 +157,24 @@ function usageOrUnavailable(value: unknown): ModelUsage {
 
 function parseTransportResponse(value: unknown, attempts: number): ModelTurn {
   const response = transportOutput(value, attempts);
+  const usage = usageOrUnavailable(response.usage);
   try {
-    return {
-      decision: parseModelDecision(response.output),
-      usage: usageOrUnavailable(response.usage),
-    };
+    return { decision: parseModelDecision(response.output), usage };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new ModelError("invalid_response", detail, false, attempts, { cause: error });
+    throw new ModelError("invalid_response", detail, false, attempts, { cause: error, usage });
   }
 }
 
 function parseTextResponse(value: unknown, attempts: number): TextTurn {
   const response = transportOutput(value, attempts);
+  const usage = usageOrUnavailable(response.usage);
   try {
     const output = typeof response.output === "string" ? response.output : JSON.stringify(response.output);
-    return { output, usage: usageOrUnavailable(response.usage) };
+    return { output, usage };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new ModelError("invalid_response", detail, false, attempts, { cause: error });
+    throw new ModelError("invalid_response", detail, false, attempts, { cause: error, usage });
   }
 }
 
@@ -217,17 +222,23 @@ export class StructuredModelAdapter implements ModelAdapter {
   ): Promise<T> {
     const startedAt = this.now();
     let lastError: ModelError | undefined;
+    // Answered-but-failed attempts are still billed, so their usage travels with the result or error.
+    let wasted: ModelUsage[] = [];
+    const withWasted = (error: ModelError): ModelError => {
+      error.usage = [...wasted, ...error.usage];
+      return error;
+    };
 
     for (let attempt = 1; attempt <= this.options.maxAttempts; attempt += 1) {
-      if (budget.signal?.aborted === true) throw cancelledError(attempt - 1);
+      if (budget.signal?.aborted === true) throw withWasted(cancelledError(attempt - 1));
       const remainingMs = this.remainingBudget(startedAt, budget.remainingTimeMs);
       if (remainingMs !== undefined && remainingMs <= 0) {
-        throw new ModelError(
+        throw withWasted(new ModelError(
           "budget_exhausted",
           "Model-call time budget was exhausted before another attempt.",
           false,
           attempt - 1,
-        );
+        ));
       }
 
       const timeoutMs = Math.max(
@@ -237,30 +248,32 @@ export class StructuredModelAdapter implements ModelAdapter {
 
       try {
         const response = await this.sendWithTimeout(request, timeoutMs, attempt, budget.signal);
-        return parse(response, attempt);
+        const parsed = parse(response, attempt);
+        return wasted.length === 0 ? parsed : { ...parsed, wastedUsage: [...wasted] };
       } catch (error) {
-        const modelError = errorFromTransport(error, attempt);
+        const modelError = withWasted(errorFromTransport(error, attempt));
         lastError = modelError;
         if (!modelError.retryable || attempt === this.options.maxAttempts) throw modelError;
+        wasted = modelError.usage;
 
         const delay = modelError.retryAfterMs !== undefined
           ? Math.min(modelError.retryAfterMs, MAX_RETRY_AFTER_MS)
           : Math.min(this.options.initialBackoffMs * 2 ** (attempt - 1), this.options.maxBackoffMs);
         const remainingAfterAttempt = this.remainingBudget(startedAt, budget.remainingTimeMs);
         if (remainingAfterAttempt !== undefined && remainingAfterAttempt <= delay) {
-          throw new ModelError(
+          throw withWasted(new ModelError(
             "budget_exhausted",
             "Model-call time budget cannot accommodate the next retry.",
             false,
             attempt,
             { cause: modelError },
-          );
+          ));
         }
         await this.sleep(delay);
       }
     }
 
-    throw lastError ?? new ModelError("transport", "Model call failed.", false, 0);
+    throw lastError ?? withWasted(new ModelError("transport", "Model call failed.", false, 0));
   }
 
   private remainingBudget(startedAt: number, availableMs: number | undefined): number | undefined {

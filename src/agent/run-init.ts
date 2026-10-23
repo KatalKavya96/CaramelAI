@@ -10,7 +10,7 @@ import { IsolatedWorkspace, type WorkspaceCheckpoint } from "../workspace";
 import { AgentEventWriter } from "./events";
 import { ProgressTracker } from "./progress";
 import type { AutonomousRunDependencies, AutonomousRunOptions } from "./policy";
-import { emptyUsageSummary, type CommandExecutor, type UsageSummary } from "./types";
+import { emptyUsageSummary, recordUsage, type CommandExecutor, type UsageSummary } from "./types";
 
 export interface InitializedRunContext {
   runId: string;
@@ -102,6 +102,9 @@ export async function initializeRunContext(
     ...(options.parentRunId === undefined ? {} : { parentRunId: options.parentRunId }),
   });
 
+  const usage = emptyUsageSummary();
+  for (const spent of options.priorUsage ?? []) recordUsage(usage, spent);
+
   return {
     runId,
     workspace,
@@ -113,7 +116,7 @@ export async function initializeRunContext(
     memory,
     readCache: new RepositoryReadCache(),
     progress: new ProgressTracker(),
-    usage: emptyUsageSummary(),
+    usage,
     checkpoints: new Map<string, WorkspaceCheckpoint>(),
     failures: [],
     verificationEvidence: [],

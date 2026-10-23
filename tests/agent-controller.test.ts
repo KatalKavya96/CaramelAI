@@ -267,12 +267,17 @@ describe("autonomous agent vertical slice", () => {
     const { result, model } = await runWithScript({
       source,
       script: [
-        new ModelError("invalid_response", "missing action", false, 1),
+        new ModelError("invalid_response", "missing action", false, 1, {
+          usage: { source: "provider", inputTokens: 500, outputTokens: 20, totalTokens: 520, costUsd: 0.002 },
+        }),
         turn({ type: "finish", summary: "Could not complete." }),
       ],
     });
 
     expect(result.status).toBe("partial");
+    // The invalid reply was refunded from the call budget but was still billed, so it counts in cost.
+    expect(result.usage.providerTotalTokens).toBeGreaterThanOrEqual(520);
+    expect(result.usage.providerCostUsd).toBeCloseTo(0.002, 10);
     expect(result.metrics.modelCalls).toBe(1); // Invalid response was refunded from budget
     expect(model.requests[1]?.messages.at(-1)?.content).toContain("prior response was invalid");
   });
