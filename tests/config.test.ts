@@ -281,13 +281,13 @@ describe("loadRunConfig", () => {
       argv: ["--repo", ".", "--task", "Fix it", "--provider", "made-up"],
       cwd,
       env: { AI_API_KEY: "secret" },
-    })).rejects.toThrow("--provider must be openrouter, deepseek, or qwen");
+    })).rejects.toThrow("--provider must be one of: openrouter, anthropic, openai, xai, deepseek, qwen");
 
     expect(loadRunConfig({
       argv: ["--repo", ".", "--task", "Fix it"],
       cwd,
       env: { MODEL_PROVIDER: "made-up", AI_API_KEY: "secret" },
-    })).rejects.toThrow("MODEL_PROVIDER must be openrouter, deepseek, or qwen");
+    })).rejects.toThrow("MODEL_PROVIDER must be one of: openrouter, anthropic, openai, xai, deepseek, qwen");
   });
 
   test("requires the credential belonging to the selected provider", async () => {

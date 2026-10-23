@@ -49,6 +49,20 @@ export OPENROUTER_MODEL="openai/gpt-5.2"
 
 OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts one task source: `--issue`, `--task`, or `--task-file`. If none is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
+### Providers
+
+| `--provider` | Key variable | Model variable | Default model | Reports cost |
+| --- | --- | --- | --- | --- |
+| `openrouter` | `AI_API_KEY` | `OPENROUTER_MODEL` | `openai/gpt-5.2` | yes |
+| `anthropic` (Claude) | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `claude-opus-5-5` | no, tokens only |
+| `openai` (GPT) | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-5.2` | no, tokens only |
+| `xai` (Grok) | `XAI_API_KEY` | `XAI_MODEL` | `grok-4` | no, tokens only |
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` | `deepseek-flash` | no, tokens only |
+| `qwen` | `QWEN_API_KEY` | `QWEN_MODEL` | `qwen-plus` | no, tokens only |
+
+All of them live in `src/model/providers.ts`; adding a provider is one entry there. Without `--provider`,
+the CLI uses OpenRouter when `AI_API_KEY` is set, otherwise the first provider whose key is set.
+
 Direct DeepSeek runs use the OpenAI-compatible API without routing through OpenRouter:
 
 ```bash

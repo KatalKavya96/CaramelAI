@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_BUDGETS } from "../config";
+import { PROVIDERS } from "../model/providers";
 
 /**
  * Where the repository comes from. A shared server accepts only `git`: a path typed into a
@@ -28,7 +29,7 @@ export const RunBudgetsSchema = z.object({
 export const RunRequestSchema = z.object({
   task: z.string().trim().min(1, "task must not be empty.").max(20_000),
   repo: RepoSourceSchema,
-  provider: z.enum(["openrouter", "deepseek", "qwen"]),
+  provider: z.enum(PROVIDERS),
   model: z.string().trim().min(1).max(200).optional(),
   budgets: RunBudgetsSchema.default({}),
   verificationCommands: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
