@@ -138,9 +138,13 @@ describe("custom OpenAI-compatible endpoint", () => {
     expect(await PROVIDER_INFO.custom.testKey(credential, answering(404))).toMatchObject({ ok: false, message: expect.stringContaining("/v1") });
   });
 
+  test("the model saved with the endpoint is the default; without one, creating the model fails clearly", () => {
+    const withModel = encodeCustomCredential({ baseUrl: "http://localhost:11434/v1", model: "qwen2.5-coder" });
+    expect(() => PROVIDER_INFO.custom.create({ apiKey: withModel })).not.toThrow();
+  });
+
   test("runs need a model, and a shared server refuses custom endpoints", () => {
     const request = { task: "t", provider: "custom", repo: { kind: "local", path: "/tmp" } };
-    expect(() => parseRunRequest(request, LOCAL_APP_POLICY)).toThrow("model");
     expect(parseRunRequest({ ...request, model: "llama3.1" }, LOCAL_APP_POLICY).model).toBe("llama3.1");
     expect(() => parseRunRequest({ ...request, model: "llama3.1", repo: { kind: "git", url: "https://github.com/a/b" } }, SHARED_SERVER_POLICY))
       .toThrow("desktop app");

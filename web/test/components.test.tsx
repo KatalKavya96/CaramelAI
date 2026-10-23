@@ -47,7 +47,7 @@ describe("BudgetMeters", () => {
 });
 
 describe("ProviderKeyForm", () => {
-  const view = { provider: "openrouter" as const, last4: "9f2c", verified: true, defaultModel: "anthropic/claude", updatedAt: null };
+  const view = { provider: "openrouter" as const, label: "OpenRouter", keyUrl: "https://openrouter.ai/keys", reportsCost: true, oauth: true, endpoint: null, last4: "9f2c", verified: true, defaultModel: "anthropic/claude", updatedAt: null };
   it("never shows the saved key, only its last four", () => {
     render(<ProviderKeyForm view={view} busy={null} onSave={vi.fn()} onTest={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("9f2c")).toBeInTheDocument();
@@ -61,5 +61,23 @@ describe("ProviderKeyForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save and test" }));
     expect(onSave).toHaveBeenCalledWith("sk-or-123");
     expect(screen.getByRole("status")).toHaveTextContent(/no credit/);
+  });
+  it("offers Connect only when the screen passes it", async () => {
+    const onConnect = vi.fn();
+    const { rerender } = render(<ProviderKeyForm view={view} busy={null} onSave={vi.fn()} onTest={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /Connect with OpenRouter|Reconnect/ })).not.toBeInTheDocument();
+    rerender(<ProviderKeyForm view={{ ...view, last4: null }} busy={null} onSave={vi.fn()} onConnect={onConnect} onTest={vi.fn()} onDelete={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Connect with OpenRouter" }));
+    expect(onConnect).toHaveBeenCalled();
+  });
+  it("saves a custom endpoint with no key", async () => {
+    const onSave = vi.fn();
+    render(<ProviderKeyForm view={{ ...view, provider: "custom", label: "Custom endpoint", oauth: false, reportsCost: false, last4: null, verified: false, defaultModel: "" }} busy={null} onSave={onSave} onTest={vi.fn()} onDelete={vi.fn()} />);
+    const save = screen.getByRole("button", { name: "Save and test" });
+    expect(save).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Base URL"), " http://localhost:11434/v1 ");
+    await userEvent.type(screen.getByLabelText("Model"), "qwen2.5-coder");
+    await userEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith("", { baseUrl: "http://localhost:11434/v1", model: "qwen2.5-coder" });
   });
 });

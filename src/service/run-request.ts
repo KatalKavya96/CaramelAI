@@ -125,9 +125,6 @@ export function parseRunRequest(input: unknown, policy: RunRequestPolicy): RunRe
   if (request.provider === "custom" && !policy.allowCustomEndpoint) {
     issues.push("provider: custom endpoints are available only in the desktop app.");
   }
-  if (request.provider === "custom" && request.model === undefined) {
-    issues.push("model: a custom endpoint needs a model name, such as llama3.1.");
-  }
   if (request.repo.kind === "local" && !policy.allowLocalRepos) {
     issues.push("repo: this server accepts only git URLs, not local paths.");
   }
