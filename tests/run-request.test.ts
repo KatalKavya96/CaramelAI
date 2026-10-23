@@ -15,6 +15,19 @@ function issues(input: unknown, policy = SHARED_SERVER_POLICY): readonly string[
 }
 
 describe("RunRequest", () => {
+  test("the desktop app expands ~ and normalizes a local path; a shared server never does", () => {
+    const desktop = { ...LOCAL_POLICY, homeDir: "/Users/kavya" };
+    const path = (input: string) => {
+      const request = parseRunRequest({ ...base, repo: { kind: "local", path: input } }, desktop);
+      return request.repo.kind === "local" ? request.repo.path : null;
+    };
+    expect(path("~/caramel-try/")).toBe("/Users/kavya/caramel-try");
+    expect(path("/Users/kavya/code/../caramel-try/.")).toBe("/Users/kavya/caramel-try");
+    expect(issues({ ...base, repo: { kind: "local", path: "~/x" } }, LOCAL_POLICY)).toEqual(["repo.path: use the folder's full path, starting with / or ~/."]);
+    expect(issues({ ...base, repo: { kind: "local", path: "~root/x" } }, desktop).join()).toContain("absolute or start with ~/");
+    expect(issues({ ...base, repo: { kind: "local", path: "~/x" } })).toEqual(["repo: this server accepts only git URLs, not local paths."]);
+  });
+
   test("fills budget defaults and accepts a GitHub URL", () => {
     const request = parseRunRequest(base, SHARED_SERVER_POLICY);
     expect(request.budgets.maxSteps).toBe(120);

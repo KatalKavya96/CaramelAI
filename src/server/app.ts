@@ -25,6 +25,8 @@ export interface Capabilities {
   repoKinds: ("git" | "local")[];
   /** POST /api/runs/:id/apply writes a local run's patch into the user's folder. */
   canApply: boolean;
+  /** The desktop user's home folder, so the folder field can show what "~/" stands for. Null when hosted. */
+  homeDir: string | null;
 }
 
 export const HOSTED_CAPABILITIES: Capabilities = {
@@ -33,6 +35,7 @@ export const HOSTED_CAPABILITIES: Capabilities = {
   network: { default: "none", choices: ["none"] },
   repoKinds: ["git"],
   canApply: false,
+  homeDir: null,
 };
 
 export interface AppOptions {

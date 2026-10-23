@@ -87,3 +87,17 @@ describe("scorecards", () => {
     expect([formatRate(null), formatRate(0.666), formatUsd(0), formatUsd(0.004), formatUsd(1.5)]).toEqual(["–", "67%", "$0", "$0.0040", "$1.50"]);
   });
 });
+
+describe("local folder paths", () => {
+  it("expands ~ and normalizes the way the server does", async () => {
+    const { repoError, resolveLocalPath } = await import("../src/domain/run-options");
+    expect(resolveLocalPath(" ~/caramel-try/ ", "/Users/kavya")).toBe("/Users/kavya/caramel-try");
+    expect(resolveLocalPath("~", "/Users/kavya")).toBe("/Users/kavya");
+    expect(resolveLocalPath("/Users/kavya/code/../caramel-try/./", null)).toBe("/Users/kavya/caramel-try");
+    expect(resolveLocalPath("~/x", null)).toBeNull();
+    expect(resolveLocalPath("~other/x", "/Users/kavya")).toBeNull();
+    expect(resolveLocalPath("caramel-try", "/Users/kavya")).toBeNull();
+    expect(repoError({ repoKind: "local", repoUrl: "", localPath: "~/caramel-try" }, ["local"], "/Users/kavya")).toBeNull();
+    expect(repoError({ repoKind: "local", repoUrl: "", localPath: "caramel-try" }, ["local"], "/Users/kavya")).toMatch(/starting with \/ or ~\//);
+  });
+});

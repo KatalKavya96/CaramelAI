@@ -85,7 +85,7 @@ describe("local desktop server", () => {
     const me = await (await call("/api/me", { cookie: setCookie.split(";")[0]! })).json();
     expect(me).toMatchObject({
       userId: "local",
-      capabilities: { mode: "local", repoKinds: ["local", "git"], canApply: true, network: { default: "none", choices: ["none", "full"] } },
+      capabilities: { mode: "local", repoKinds: ["local", "git"], canApply: true, homeDir: expect.any(String), network: { default: "none", choices: ["none", "full"] } },
     });
   });
 
