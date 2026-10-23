@@ -61,4 +61,5 @@ export const HOSTED_CAPABILITIES: Capabilities = {
   network: { default: "none", choices: ["none"] },
   repoKinds: ["git"],
   canApply: false,
+  homeDir: null,
 };

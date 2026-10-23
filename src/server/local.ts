@@ -59,6 +59,7 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
     network: { default: "none", choices: ["none", "full"] },
     repoKinds: ["local", "git"],
     canApply: true,
+    homeDir: homedir(),
   };
 
   let app: ((request: Request) => Promise<Response>) | undefined;

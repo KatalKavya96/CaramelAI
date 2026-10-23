@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { DEFAULT_BUDGETS } from "../config";
 import { PROVIDERS } from "../model/providers";
@@ -9,7 +11,8 @@ import { PROVIDERS } from "../model/providers";
 export const RepoSourceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("local"),
-    path: z.string().trim().min(1).refine((path) => path.startsWith("/"), "Local paths must be absolute."),
+    // "~" is expanded by parseRunRequest on a server that has a home folder to expand it to.
+    path: z.string().trim().min(1).max(4096).refine((path) => path.startsWith("/") || /^~(\/|$)/.test(path), "Local paths must be absolute or start with ~/."),
   }),
   z.object({
     kind: z.literal("git"),
@@ -72,6 +75,23 @@ export interface RunRequestPolicy {
    * the server send requests into its own network (server-side request forgery).
    */
   allowCustomEndpoint: boolean;
+  /** Where "~" in a local path points. Only the desktop app has one: there, it is the user's own home. */
+  homeDir: string | null;
+}
+
+/**
+ * "~/code/app/" or "/Users/me/code/../code/app" -> "/Users/me/code/app": the form people type,
+ * turned into the one path the run, the run list and Apply all agree on. "~other" is refused:
+ * expanding another user's home is not something a run should do.
+ */
+export function normalizeLocalPath(path: string, homeDir: string | null): string | null {
+  const trimmed = path.trim();
+  let expanded = trimmed;
+  if (trimmed === "~" || trimmed.startsWith("~/")) {
+    if (homeDir === null) return null;
+    expanded = join(homeDir, trimmed.slice(1));
+  }
+  return isAbsolute(expanded) ? resolve(expanded) : null;
 }
 
 export const SHARED_SERVER_POLICY: RunRequestPolicy = {
@@ -82,6 +102,7 @@ export const SHARED_SERVER_POLICY: RunRequestPolicy = {
   allowRunNetwork: false,
   sandbox: "docker",
   allowCustomEndpoint: false,
+  homeDir: null,
 };
 
 /**
@@ -96,6 +117,7 @@ export const LOCAL_APP_POLICY: RunRequestPolicy = {
   allowRunNetwork: true,
   sandbox: "auto",
   allowCustomEndpoint: true,
+  homeDir: homedir(),
 };
 
 export class RunRequestError extends Error {
@@ -127,6 +149,10 @@ export function parseRunRequest(input: unknown, policy: RunRequestPolicy): RunRe
   }
   if (request.repo.kind === "local" && !policy.allowLocalRepos) {
     issues.push("repo: this server accepts only git URLs, not local paths.");
+  } else if (request.repo.kind === "local") {
+    const normalized = normalizeLocalPath(request.repo.path, policy.homeDir);
+    if (normalized === null) issues.push("repo.path: use the folder's full path, starting with / or ~/.");
+    else request.repo = { kind: "local", path: normalized };
   }
   if (request.repo.kind === "git") {
     const url = new URL(request.repo.url);

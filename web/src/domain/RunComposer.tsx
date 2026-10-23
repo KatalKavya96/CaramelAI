@@ -4,7 +4,7 @@ import { repoLabel } from "../lib/format";
 import { Composer } from "../patterns";
 import { BranchIcon, Button, ChevronDownIcon, Dialog, FolderIcon, GlobeIcon, Menu, Pill, SegmentedControl, ShieldIcon, SlidersIcon, TextAreaField, TextField } from "../ui";
 import { PROVIDER_COPY } from "./providers";
-import { BUDGET_PRESETS, repoDisplay, repoError, type RepoKind, type RunOptions } from "./run-options";
+import { BUDGET_PRESETS, repoDisplay, repoError, resolveLocalPath, type RepoKind, type RunOptions } from "./run-options";
 import styles from "./RunComposer.module.css";
 
 export interface ModelPickerProps {
@@ -131,7 +131,7 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
   const [repoOpen, setRepoOpen] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
   const preset = BUDGET_PRESETS.find((item) => item.id === options.preset) ?? BUDGET_PRESETS[1];
-  const repoMissing = repoError(options, capabilities.repoKinds) !== null;
+  const repoMissing = repoError(options, capabilities.repoKinds, capabilities.homeDir) !== null;
   const canSubmit = task.trim() !== "" && !repoMissing && options.provider !== null;
   const set = (patch: Partial<RunOptions>) => onOptionsChange({ ...options, ...patch });
   const canChooseNetwork = capabilities.network.choices.length > 1;
@@ -188,6 +188,7 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
         onOpenChange={setRepoOpen}
         options={options}
         kinds={capabilities.repoKinds}
+        homeDir={capabilities.homeDir}
         recent={recentRepos}
         {...(onPickFolder === undefined ? {} : { onPickFolder })}
         onSave={(patch) => set(patch)}
@@ -199,10 +200,11 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
 
 type RepoPatch = Pick<RunOptions, "repoKind" | "repoUrl" | "gitRef" | "localPath">;
 
-function RepoDialog({ open, onOpenChange, options, kinds, recent, onPickFolder, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; options: RunOptions; kinds: RepoKind[]; recent: { kind: RepoKind; value: string }[]; onPickFolder?: () => Promise<string | null>; onSave: (patch: RepoPatch) => void }) {
+function RepoDialog({ open, onOpenChange, options, kinds, homeDir, recent, onPickFolder, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; options: RunOptions; kinds: RepoKind[]; homeDir: string | null; recent: { kind: RepoKind; value: string }[]; onPickFolder?: () => Promise<string | null>; onSave: (patch: RepoPatch) => void }) {
   const [draft, setDraft] = useState<RepoPatch>(options);
   const [touched, setTouched] = useState(false);
-  const error = touched ? repoError(draft, kinds) : null;
+  const error = touched ? repoError(draft, kinds, homeDir) : null;
+  const resolved = resolveLocalPath(draft.localPath, homeDir);
   const update = (patch: Partial<RepoPatch>) => setDraft((current) => ({ ...current, ...patch }));
   const local = draft.repoKind === "local";
   const shown = recent.filter((item) => item.kind === draft.repoKind);
@@ -229,8 +231,9 @@ function RepoDialog({ open, onOpenChange, options, kinds, recent, onPickFolder, 
         onSubmit={(event) => {
           event.preventDefault();
           setTouched(true);
-          if (repoError(draft, kinds) !== null) return;
-          onSave({ repoKind: draft.repoKind, repoUrl: draft.repoUrl.trim(), gitRef: draft.gitRef.trim(), localPath: draft.localPath.trim() });
+          if (repoError(draft, kinds, homeDir) !== null) return;
+          // Saved resolved, so the pill, the recent list and the run all show the same folder.
+          onSave({ repoKind: draft.repoKind, repoUrl: draft.repoUrl.trim(), gitRef: draft.gitRef.trim(), localPath: resolveLocalPath(draft.localPath, homeDir) ?? draft.localPath.trim() });
           onOpenChange(false);
         }}
       >
@@ -250,7 +253,7 @@ function RepoDialog({ open, onOpenChange, options, kinds, recent, onPickFolder, 
             <TextField
               label="Folder"
               placeholder="/Users/you/code/project"
-              hint="The full path to a git repository on this computer."
+              hint={resolved !== null && resolved !== draft.localPath.trim() ? `Uses ${resolved}` : "The full path to a folder on this computer, starting with / or ~/."}
               value={draft.localPath}
               onChange={(event) => update({ localPath: event.target.value })}
               onBlur={() => setTouched(true)}

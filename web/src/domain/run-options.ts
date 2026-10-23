@@ -38,13 +38,34 @@ export interface RunOptions {
 
 const GIT_URL = /^https:\/\/[\w.-]+\/[\w.-]+\/[\w.-]+?(\.git)?\/?$/;
 
+/**
+ * "~/code/./app/" -> "/Users/me/code/app", the same way the server normalizes it, so the dialog
+ * can show the folder a run will really use. Null when the path is not absolute (or "~" has no home).
+ */
+export function resolveLocalPath(path: string, homeDir: string | null): string | null {
+  let expanded = path.trim();
+  if (expanded === "~" || expanded.startsWith("~/")) {
+    // An older server sends no homeDir at all, hence the falsy check rather than === null.
+    if (!homeDir) return null;
+    expanded = `${homeDir}/${expanded.slice(1)}`;
+  }
+  if (!expanded.startsWith("/")) return null;
+  const parts: string[] = [];
+  for (const part of expanded.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `/${parts.join("/")}`;
+}
+
 /** The server's own rules, checked early for a friendlier message: https git URLs, absolute local paths. */
-export function repoError(options: Pick<RunOptions, "repoKind" | "repoUrl" | "localPath">, kinds: readonly RepoKind[]): string | null {
+export function repoError(options: Pick<RunOptions, "repoKind" | "repoUrl" | "localPath">, kinds: readonly RepoKind[], homeDir: string | null = null): string | null {
   if (!kinds.includes(options.repoKind)) return "This server cannot run on that kind of repository.";
   if (options.repoKind === "local") {
     const path = options.localPath.trim();
     if (path === "") return "Choose a folder to run in.";
-    return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) ? null : "Use the folder's full path, starting with /.";
+    return resolveLocalPath(path, homeDir) !== null || /^[A-Za-z]:[\\/]/.test(path) ? null : "Use the folder's full path, starting with / or ~/.";
   }
   const url = options.repoUrl.trim();
   if (url === "") return "Add a repository to run against.";
