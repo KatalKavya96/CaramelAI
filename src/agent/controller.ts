@@ -127,6 +127,7 @@ export async function runAutonomousTask(
           lastState.fingerprint,
           verifiedPatchSha,
           diffReviewedPatchSha,
+          ctx.trustedChecks.length > 0,
         );
         const missing = missingFinishRequirements({
           changedFiles: lastState.changedFiles.length,

@@ -33,6 +33,8 @@ export function evaluateFinishDecision(
   patchSha256: string,
   verifiedPatchSha: string | null,
   diffReviewedPatchSha: string | null,
+  /** False when the repository has no test, build or lint command: nothing could have verified it. */
+  hasTrustedChecks = true,
 ): { status: AgentStatus; terminationReason: string } {
   const verified =
     changedFilesCount > 0 &&
@@ -47,7 +49,10 @@ export function evaluateFinishDecision(
       ? "Model requested finish without producing code changes."
       : diffReviewedPatchSha !== patchSha256
         ? "Model requested finish without reviewing the final diff."
-        : "Model requested finish without successful verification for the final changed state.";
+        : hasTrustedChecks
+          ? "Model requested finish without successful verification for the final changed state."
+          // Not the agent's failure: say so, and how to make the next run verifiable.
+          : "No verification available: this repository has no test, build or lint command. Add one under Checks to verify runs here.";
 
   return { status, terminationReason };
 }

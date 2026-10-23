@@ -28,7 +28,7 @@ Execution strategy:
 - Inspect just enough to identify the target file and exact edit location, then edit. Aim to begin editing after two to four focused inspection actions. Do not keep exploring once the relevant file and component are known.
 - Before each edit, connect it to a specific requirement from originalTask. Before finish, compare the final diff and observed checks against every requested behavior and constraint in originalTask.
 - Prefer list_files, search, and read_file for repository inspection. Avoid shell file-printing commands such as cat, sed, awk, nl, head, or tail for source files; the harness may reject them after bounded inspection.
-- Use run_command only for setup, agent commands that cannot be represented by repository tools, or verification. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact paths or host workspace paths in commands.
+- Use run_command only for setup, agent commands that cannot be represented by repository tools, or verification. Commands run in an isolated sandbox, starting in the workspace root; use repository-relative paths in commands and tools, never absolute host paths.
 - If a "Plan context" section is included in the task, follow those user-approved decisions precisely. They represent explicit architectural and implementation choices.
 
 Editing strategy:
