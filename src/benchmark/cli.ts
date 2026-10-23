@@ -20,7 +20,7 @@ function optional(args: readonly string[], name: string): string | undefined {
 const USAGE = [
   "Usage: benchmark evaluate --task <directory> --patch <file> --output <directory>",
   "       benchmark report --input <report.json> [--comparison <report.json>]",
-  "       benchmark agent --output <directory> [--tasks a,b] [--provider openrouter] [--models m1,m2]",
+  "       benchmark agent --output <directory> [--tasks a,b] [--provider openrouter] --models m1,m2",
   "                       [--repeats 1] [--max-cost <dollars>] [--sandbox auto|native|docker]",
   "",
   "agent runs the real agent on each task and scores it with the hidden checks. The provider key is",
@@ -34,7 +34,8 @@ async function runAgentCommand(args: readonly string[], env: Record<string, stri
   const info = PROVIDER_INFO[provider];
   const apiKey = credentialFromEnv(provider, env);
   if (apiKey === undefined) throw new Error(provider === "custom" ? "Set CUSTOM_BASE_URL (and CUSTOM_API_KEY if it needs one) first." : `Set ${info.keyEnv} to your ${info.label} key first.`);
-  if (provider === "custom" && optional(args, "--models") === undefined) throw new Error("A custom endpoint needs --models.");
+  // No default model: a benchmark spends money per run, so which models it pays for is always the user's choice.
+  if (optional(args, "--models") === undefined) throw new Error("Name the models to compare with --models, e.g. --models qwen/qwen3-coder:free. On OpenRouter, ids ending in :free cost nothing.");
   const sandbox = optional(args, "--sandbox") ?? "auto";
   if (!SANDBOX_CHOICES.includes(sandbox as SandboxChoice)) throw new Error(`--sandbox must be one of: ${SANDBOX_CHOICES.join(", ")}`);
   const list = (value: string | undefined) => value?.split(",").map((item) => item.trim()).filter((item) => item !== "");
@@ -52,7 +53,7 @@ async function runAgentCommand(args: readonly string[], env: Record<string, stri
     tasksRoot,
     taskIds,
     provider,
-    models: list(optional(args, "--models")) ?? [info.defaultModel],
+    models: list(option(args, "--models")) ?? [],
     repeats: Number(optional(args, "--repeats") ?? "1"),
     outputPath: option(args, "--output"),
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),

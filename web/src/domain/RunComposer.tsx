@@ -18,10 +18,16 @@ export interface ModelPickerProps {
 }
 
 /** The top-left pill from the mockups, now listing the providers you have keys for. */
+/** OpenRouter's free variants end in ":free"; anything else there bills the key. Other providers always bill. */
+export function isPaidModel(provider: Provider, model: string): boolean {
+  return provider !== "custom" && !model.endsWith(":free");
+}
+
 export function ModelPicker({ providers, provider, model, onChange, onManageKeys, short = false }: ModelPickerProps) {
   const connected = providers.filter((view) => view.last4 !== null);
   const [otherOpen, setOtherOpen] = useState(false);
-  const label = provider === null ? "Connect a model" : short ? (model.split("/").at(-1) ?? model) : `${PROVIDER_COPY[provider].name} · ${model}`;
+  const name = provider === null ? "Connect a model" : short ? (model.split("/").at(-1) ?? model) : `${PROVIDER_COPY[provider].name} · ${model}`;
+  const label = provider !== null && provider === "openrouter" && isPaidModel(provider, model) ? `${name} · paid` : name;
   return (
     <>
     <Menu
@@ -31,7 +37,7 @@ export function ModelPicker({ providers, provider, model, onChange, onManageKeys
       items={[
         ...connected.map((view) => ({
           label: PROVIDER_COPY[view.provider].name,
-          description: view.verified ? view.defaultModel : `${view.defaultModel} · key not verified`,
+          description: [view.defaultModel, view.provider === "openrouter" && isPaidModel(view.provider, view.defaultModel) ? "paid" : null, view.verified ? null : "key not verified"].filter((part) => part !== null).join(" · "),
           selected: view.provider === provider,
           onSelect: () => onChange(view.provider, view.defaultModel),
         })),
@@ -83,7 +89,7 @@ function OtherModelDialog({ open, onOpenChange, connected, provider, model, onSa
         <TextField
           label="Model id"
           placeholder={chosen === null ? "" : PROVIDER_COPY[chosen].modelExample}
-          hint={chosen === "openrouter" ? "For example x-ai/grok-4, or a model ending in :free." : undefined}
+          hint={chosen === "openrouter" ? (draftModel.trim() !== "" && isPaidModel(chosen, draftModel.trim()) ? "This model is paid: each run is charged to your key. Free models end in :free." : "Free models end in :free, for example qwen/qwen3-coder:free.") : undefined}
           value={draftModel}
           onChange={(event) => setDraftModel(event.target.value)}
           autoFocus

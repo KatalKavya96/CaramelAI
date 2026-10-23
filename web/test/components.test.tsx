@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BudgetMeters, OutcomeCard, ProviderKeyForm, ScorecardView, StepTimeline } from "../src/domain";
+import { BudgetMeters, ModelPicker, OutcomeCard, ProviderKeyForm, ScorecardView, StepTimeline } from "../src/domain";
 import { INITIAL_LIVE_RUN, reduceLiveRun } from "../src/data/live-run";
 import { VERIFIED_RUN } from "./fixtures/events";
 import { SCORECARD } from "./fixtures/scorecard";
@@ -92,5 +92,15 @@ describe("ScorecardView", () => {
     expect(screen.getByRole("note")).toHaveTextContent(/1 run was not started/);
     expect(screen.getByText("Said verified, but the hidden check failed")).toBeInTheDocument();
     expect(screen.getByText("runs/x-ai_grok-4/py-not-a-bug/1")).toBeInTheDocument();
+  });
+});
+
+describe("ModelPicker", () => {
+  it("tags a paid OpenRouter model and not a free one", () => {
+    const view = { provider: "openrouter" as const, label: "OpenRouter", keyUrl: "", reportsCost: true, oauth: true, endpoint: null, last4: "9f2c", verified: true, defaultModel: "openai/gpt-5.2", updatedAt: null };
+    const { rerender } = render(<ModelPicker providers={[view]} provider="openrouter" model="openai/gpt-5.2" onChange={vi.fn()} onManageKeys={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /gpt-5\.2 · paid/ })).toBeInTheDocument();
+    rerender(<ModelPicker providers={[view]} provider="openrouter" model="poolside/laguna-s-2.1:free" onChange={vi.fn()} onManageKeys={vi.fn()} />);
+    expect(screen.queryByText(/paid/)).not.toBeInTheDocument();
   });
 });
