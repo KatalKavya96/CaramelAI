@@ -37,7 +37,7 @@ export function AppShell({ sidebar, rail, collapsed, drawerOpen, onDrawerOpenCha
           </RadixDialog.Content>
         </RadixDialog.Portal>
       </RadixDialog.Root>
-      <main className={styles.main} id="main">
+      <main className={styles.main} id="main" tabIndex={-1}>
         {children}
       </main>
     </div>

@@ -1,5 +1,5 @@
 import type { RunView } from "../lib/contract";
-import { formatWhen, repoLabel, sourceUrl, taskTitle } from "../lib/format";
+import { formatWhen, repoLabel, sourceRef, sourceUrl, taskTitle } from "../lib/format";
 import { statusCopy } from "../lib/status";
 import { CommandPalette } from "../patterns";
 import { DocIcon } from "../ui";
@@ -16,8 +16,9 @@ export function SearchPalette({ open, onOpenChange, runs, onOpen, onNew }: { ope
         id: run.id,
         title: taskTitle(run.request.task),
         ...(run.summary === null ? {} : { snippet: run.summary }),
+        searchText: `${sourceUrl(run.request.repo)} ${sourceRef(run.request.repo) ?? ""} ${statusCopy(run.status).label}`,
         meta: `${repoLabel(sourceUrl(run.request.repo))} · ${statusCopy(run.status).label} · ${formatWhen(run.createdAt)}`,
-        group: statusCopy(run.status).tone === "active" ? "Running" : "Recent",
+        group: ["queued", "preparing", "running"].includes(run.status) ? "Running" : "Recent",
         icon: <DocIcon size={20} />,
       }))}
       onSelect={(item) => {
@@ -26,7 +27,6 @@ export function SearchPalette({ open, onOpenChange, runs, onOpen, onNew }: { ope
       }}
       footerAction={{
         label: "New run",
-        shortcut: "⌘K",
         onClick: () => {
           onOpenChange(false);
           onNew();

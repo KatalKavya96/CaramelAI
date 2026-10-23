@@ -46,7 +46,7 @@ export function Navbar({ theme, toggleTheme, onOpenCommands, onQuickStart, reduc
         logoAlt="Caramel, back to top"
         logoHref="#top"
         items={items}
-        cta={{ label: "Star on GitHub", href: LINKS.github }}
+        cta={{ label: "Try a sample", href: "#product" }}
         theme={theme}
         surface="glass"
         openOn="click"

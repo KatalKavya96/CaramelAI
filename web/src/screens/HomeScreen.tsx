@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError, apiErrorMessage, useCapabilities, useProviders, useRuns, useStartRun } from "../data";
+import { ApiError, apiErrorMessage, useCapabilities, useProviders, useRuns, useSession, useStartRun } from "../data";
 import { BUDGET_PRESETS, defaultRunOptions, ModelPicker, RunComposer, sandboxLabel, type RunOptions } from "../domain";
 import type { Capabilities, Provider, StartRunBody } from "../lib/contract";
 import { sourceUrl } from "../lib/format";
@@ -8,6 +8,8 @@ import { BrandFooter, ErrorBanner, Hero, QuickActions, TopBar } from "../pattern
 import { AlertIcon, Button, CheckIcon, CodeIcon, GearIcon, IconButton, KeyIcon, PencilIcon } from "../ui";
 import { useUiState } from "../app/ui-state";
 import styles from "./screens.module.css";
+
+import { useDraft } from "../patterns/useDraft";
 
 const OPTIONS_KEY = "caramel-run-options";
 
@@ -42,7 +44,9 @@ export function HomeScreen() {
   const start = useStartRun();
   const ui = useUiState();
   const capabilities = useCapabilities();
-  const [task, setTask] = useState("");
+  const session = useSession();
+  const [task, setTask] = useDraft(`new:${session.data?.userId ?? "local"}`);
+  const [starterNotice, setStarterNotice] = useState("");
   const [options, setOptions] = useState<RunOptions>(() => loadOptions(capabilities));
 
   // A repository passed from the Repositories page wins over the remembered one.
@@ -57,12 +61,15 @@ export function HomeScreen() {
   const views = providers.data ?? [];
   useEffect(() => {
     const connected = views.filter((view) => view.last4 !== null);
-    if (connected.length === 0) return;
+    if (connected.length === 0) {
+      if (providers.isSuccess && options.provider !== null) setOptions(current => ({ ...current, provider:null, model:"" }));
+      return;
+    }
     if (options.provider === null || !connected.some((view) => view.provider === options.provider)) {
       const pick = connected.find((view) => view.verified) ?? connected[0];
       if (pick !== undefined) setOptions((current) => ({ ...current, provider: pick.provider, model: pick.defaultModel }));
     }
-  }, [views, options.provider]);
+  }, [views, options.provider, providers.isSuccess]);
 
   useEffect(() => {
     try {
@@ -90,22 +97,23 @@ export function HomeScreen() {
       // Sent only when the server lets the user choose; a hosted server rejects "full".
       ...(capabilities.network.choices.length > 1 ? { network: options.network } : {}),
     };
-    start.mutate(body, { onSuccess: (run) => navigate(`/runs/${run.id}`) });
+    start.mutate(body, { onSuccess: (run) => { setTask(""); navigate(`/runs/${run.id}`); } });
   };
 
   const error = start.error instanceof ApiError ? apiErrorMessage(start.error.status, start.error.code, start.error.issues, start.error.detail) : start.error === null ? null : "Could not start the run.";
 
-  // The mockup shows the model pill twice, top-left and inside the composer; both drive the same choice.
+  // Keep the model choice beside the task instead of duplicating it in the top bar.
   const pickerProps = { providers: views, provider: options.provider, model: options.model, onChange: (provider: Provider, model: string) => setOptions((current) => ({ ...current, provider, model })), onManageKeys: () => navigate("/setup") };
-  const picker = <ModelPicker {...pickerProps} />;
+
 
   return (
     <div className={styles.home}>
       <div className={styles.homeTop}>
-        <TopBar start={picker} end={<IconButton label="Settings" icon={<GearIcon size={22} />} onClick={() => ui.openSettings()} />} />
+        <TopBar end={<IconButton label="Settings" icon={<GearIcon size={22} />} onClick={() => ui.openSettings()} />} />
       </div>
       <div className={styles.homeCenter}>
-        <Hero title="What should Caramel work on?" subtitle="Describe a change. Caramel makes it in your repository and proves it with your checks." />
+        <Hero title="What should Caramel work on?" subtitle="Describe a change. Caramel makes it in your repository and checks the result with your project’s own commands." />
+        {providers.isError ? <ErrorBanner message="Could not load model providers. Your draft is kept." onRetry={() => void providers.refetch()} /> : null}
         {noKeys ? (
           <div className={styles.setupCallout}>
             <KeyIcon size={20} />
@@ -121,6 +129,7 @@ export function HomeScreen() {
             onOptionsChange={setOptions}
             onSubmit={submit}
             busy={start.isPending}
+            providerReady={providers.isSuccess && views.some(view => view.provider === options.provider && view.last4 !== null)}
             capabilities={capabilities}
             recentRepos={recentRepos}
             {...(pickFolder === undefined ? {} : { onPickFolder: () => pickFolder() })}
@@ -129,7 +138,9 @@ export function HomeScreen() {
           />
           {error === null ? null : <ErrorBanner message={error} />}
         </div>
-        <QuickActions label="Start from" actions={QUICK.map((item) => ({ label: item.label, icon: item.icon, onClick: () => setTask(item.prefix) }))} />
+        {task !== "" ? <div className={styles.draftBar}><span>Unsent draft</span><Button size="sm" variant="ghost" onClick={() => { setTask(""); setStarterNotice(""); }}>Discard draft</Button></div> : null}
+        <p role="status" className={styles.panelNote}>{starterNotice}</p>
+        <QuickActions label="Start from" actions={QUICK.map((item) => ({ label: item.label, icon: item.icon, onClick: () => { if (task.trim()) { setStarterNotice("Your draft was kept. Clear it to use a starter."); } else { setTask(item.prefix); setStarterNotice(""); } } }))} />
       </div>
       <BrandFooter />
     </div>

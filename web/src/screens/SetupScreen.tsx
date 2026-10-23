@@ -18,7 +18,7 @@ export function SetupScreen() {
         actions={ready ? <Button variant="primary" onClick={() => navigate("/")}>Start a run</Button> : undefined}
       />
       <div className={styles.note}>
-        Want Claude, GPT or Grok? Use an OpenRouter key: one key reaches all of them, and you choose the model per run.
+        Choose a provider you already use. OpenRouter also offers access to several model families through one account.
       </div>
       <ProviderKeys />
     </Page>

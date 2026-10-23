@@ -22,7 +22,7 @@
 .modelErrors { font-size: var(--text-sm); color: var(--text-muted); }
 .modelErrors summary { cursor: pointer; }
 .modelErrors code { font: 12.5px var(--font-mono); }
-.followUp { position: sticky; bottom: 0; padding: 20px 0 20px; display: flex; flex-direction: column; gap: 10px; background: linear-gradient(to bottom, transparent, var(--bg) 30%); }
+.followUp { padding:16px 0 24px; display:flex; flex-direction:column; gap:10px; }
 .panelNote { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
 
 /* Settings */
@@ -48,3 +48,12 @@
   .home { padding: 12px 16px; }
   .runPage { padding: 16px 16px 0; }
 }
+
+.draftBar { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:var(--text-sm); color:var(--text-muted); }
+.reviewWorkspace { display:flex; flex-direction:column; gap:24px; max-width:1440px; margin:0 auto; }
+.reviewNav { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 0; }
+.activity { border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; }
+.activity > summary { cursor:pointer; font-weight:500; }
+.resultIntro { display:flex; flex-direction:column; gap:16px; }
+.reviewActions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+@media(max-width:600px){ .repoGrid{grid-template-columns:minmax(0,1fr)} .homeCenter{gap:20px;padding:12px 0} .reviewNav{position:sticky;top:0;z-index:3;background:var(--bg)} }

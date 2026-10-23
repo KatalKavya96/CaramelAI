@@ -26,7 +26,7 @@ function CopyCommand({ code, label }: { code:string; label:string }) {
 function QuickStart() {
   return <>
     <div className={styles.drawerEyebrow}><TerminalIcon size={17} />From source to your first run</div>
-    <Dialog.Title className={styles.drawerTitle}>Start building.</Dialog.Title>
+    <Dialog.Title className={styles.drawerTitle}>Set up the CLI</Dialog.Title>
     <Dialog.Description className={styles.description}>The CLI is available today. Bring a provider key and a repository you want to work on.</Dialog.Description>
     <div className={styles.requirements}><strong>Before you start</strong><p>Bun 1.3.x, GNU Make, and a command sandbox: macOS Seatbelt, Linux with bubblewrap, or Docker.</p></div>
     <ol className={styles.setupSteps}>
@@ -45,7 +45,7 @@ function CommandPalette({ openQuickStart,toggleTheme,theme,appearance,toggleAppe
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = "caramel-command-results";
   const commands = useMemo(() => [
-    {id:"start",label:"Get started",hint:"Quick-start guide",keywords:"install cli setup run",action:openQuickStart},
+    {id:"start",label:"Set up the CLI",hint:"Quick-start guide",keywords:"install cli setup run",action:openQuickStart},
     {id:"product",label:"Product demo",hint:"Try three example tasks",keywords:"preview bug refactor tests",href:"#product"},
     {id:"how",label:"How it works",hint:"From issue to evidence",keywords:"steps process",href:"#how"},
     {id:"example-replay",label:"Example runs",hint:"Verified and partial outcomes",keywords:"replay evidence",href:"#example-replay"},

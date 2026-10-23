@@ -5,3 +5,5 @@
 .mono { font-family: var(--font-mono); font-size: 13px; }
 .pathRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
 .browse { margin-top: 27px; }
+.advancedOptions { display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+.advancedOptions p { color:var(--text-muted); font-size:var(--text-sm); line-height:1.6; }

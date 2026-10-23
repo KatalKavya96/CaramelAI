@@ -20,3 +20,12 @@
 .del { background: var(--diff-del-bg); color: var(--diff-del-text); }
 .context { color: var(--text); }
 .hunk td { padding: 4px 14px; color: var(--text-muted); background: var(--surface-sunken); }
+.wrapLines .code { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
+.wrapLines .table { table-layout:fixed; }
+.wrapLines .num { width:48px; min-width:0; }
+.diff { min-width:0; }
+@media(max-width:600px){ .wrapLines .num{width:30px;padding:0 4px} .header{padding:12px 8px} .table{font-size:12px} }
+.numberColumn { width:48px; }
+.diff > button { align-self:flex-end; }
+.file { scroll-margin-top:100px; }
+@media(max-width:600px){ .numberColumn{width:30px} }
