@@ -126,9 +126,15 @@ export function useSaveKey() {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ provider, key }: { provider: Provider; key: string }) => api.saveKey(provider, key),
+    mutationFn: ({ provider, key, endpoint }: { provider: Provider; key: string; endpoint?: { baseUrl: string; model: string } }) =>
+      api.saveKey(provider, key, endpoint),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.providers }),
   });
+}
+
+export function useConnectProvider() {
+  const api = useApi();
+  return useMutation({ mutationFn: (provider: Provider) => api.connectProvider(provider) });
 }
 
 export function useTestKey() {

@@ -224,13 +224,18 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
         case "PUT providers/:id/key": {
           // A shared server must not fetch URLs its users choose: that reaches its private network.
           if (!isProvider(id) || (id === "custom" && capabilities.mode !== "local")) return fail(404, "not_found");
-          const input = (await body(request)) as { key?: unknown; baseUrl?: unknown };
+          const input = (await body(request)) as { key?: unknown; baseUrl?: unknown; model?: unknown };
           let secret: string;
           if (id === "custom") {
             if (typeof input.baseUrl !== "string") throw new RunRequestError(["baseUrl: must be a string."]);
             if (input.key !== undefined && typeof input.key !== "string") throw new RunRequestError(["key: must be a string."]);
+            if (input.model !== undefined && typeof input.model !== "string") throw new RunRequestError(["model: must be a string."]);
             try {
-              secret = encodeCustomCredential({ baseUrl: input.baseUrl, ...(input.key === undefined ? {} : { apiKey: input.key }) });
+              secret = encodeCustomCredential({
+                baseUrl: input.baseUrl,
+                ...(input.key === undefined ? {} : { apiKey: input.key }),
+                ...(input.model === undefined ? {} : { model: input.model }),
+              });
             } catch (error) {
               throw new RunRequestError([`baseUrl: ${(error as Error).message}`]);
             }

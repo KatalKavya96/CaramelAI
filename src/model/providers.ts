@@ -70,6 +70,8 @@ const bearer = (key: string) => ({ authorization: `Bearer ${key}` });
 export interface CustomEndpoint {
   baseUrl: string;
   apiKey: string;
+  /** The model runs use unless they name another; saved with the endpoint because there is no default. */
+  model?: string;
 }
 
 /** Local runtimes such as Ollama ignore the key, but the OpenAI client needs a non-empty one. */
@@ -96,16 +98,22 @@ export function normalizeCustomBaseUrl(input: string): string {
   return url.toString().replace(/\/+$/, "");
 }
 
-export function encodeCustomCredential(endpoint: { baseUrl: string; apiKey?: string }): string {
+export function encodeCustomCredential(endpoint: { baseUrl: string; apiKey?: string; model?: string }): string {
   const apiKey = endpoint.apiKey?.trim() || NO_KEY;
-  return JSON.stringify({ baseUrl: normalizeCustomBaseUrl(endpoint.baseUrl), apiKey });
+  const model = endpoint.model?.trim();
+  if (model !== undefined && model.length > 200) throw new Error("Model name is too long.");
+  return JSON.stringify({ baseUrl: normalizeCustomBaseUrl(endpoint.baseUrl), apiKey, ...(model ? { model } : {}) });
 }
 
 export function decodeCustomCredential(secret: string): CustomEndpoint {
   try {
     const value = JSON.parse(secret) as Partial<CustomEndpoint>;
     if (typeof value.baseUrl === "string" && typeof value.apiKey === "string") {
-      return { baseUrl: normalizeCustomBaseUrl(value.baseUrl), apiKey: value.apiKey };
+      return {
+        baseUrl: normalizeCustomBaseUrl(value.baseUrl),
+        apiKey: value.apiKey,
+        ...(typeof value.model === "string" && value.model !== "" ? { model: value.model } : {}),
+      };
     }
   } catch {
     // Falls through to the error below.
@@ -121,7 +129,11 @@ export function credentialFromEnv(provider: Provider, env: Record<string, string
   if (provider !== "custom") return env[PROVIDER_INFO[provider].keyEnv]?.trim() || undefined;
   const baseUrl = env.CUSTOM_BASE_URL?.trim();
   if (baseUrl === undefined || baseUrl === "") return undefined;
-  return encodeCustomCredential({ baseUrl, ...(env.CUSTOM_API_KEY === undefined ? {} : { apiKey: env.CUSTOM_API_KEY }) });
+  return encodeCustomCredential({
+    baseUrl,
+    ...(env.CUSTOM_API_KEY === undefined ? {} : { apiKey: env.CUSTOM_API_KEY }),
+    ...(env.CUSTOM_MODEL === undefined ? {} : { model: env.CUSTOM_MODEL }),
+  });
 }
 
 export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
@@ -216,11 +228,10 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     reportsCost: false,
     oauth: false,
     create: (options) => {
-      if (options.model === undefined || options.model.trim() === "") {
-        throw new Error("A custom endpoint needs a model name, such as llama3.1 or qwen2.5-coder.");
-      }
       const endpoint = decodeCustomCredential(options.apiKey);
-      return createCustomModel({ ...endpoint, model: options.model.trim() });
+      const model = options.model?.trim() || endpoint.model;
+      if (model === undefined) throw new Error("A custom endpoint needs a model name, such as llama3.1 or qwen2.5-coder.");
+      return createCustomModel({ baseUrl: endpoint.baseUrl, apiKey: endpoint.apiKey, model });
     },
     // Listing models is free on every OpenAI-compatible server and proves the URL and key work.
     testKey: async (key, fetcher) => {

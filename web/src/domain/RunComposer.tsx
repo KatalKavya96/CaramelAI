@@ -20,8 +20,10 @@ export interface ModelPickerProps {
 /** The top-left pill from the mockups, now listing the providers you have keys for. */
 export function ModelPicker({ providers, provider, model, onChange, onManageKeys, short = false }: ModelPickerProps) {
   const connected = providers.filter((view) => view.last4 !== null);
+  const [otherOpen, setOtherOpen] = useState(false);
   const label = provider === null ? "Connect a model" : short ? (model.split("/").at(-1) ?? model) : `${PROVIDER_COPY[provider].name} · ${model}`;
   return (
+    <>
     <Menu
       width={320}
       header={connected.length === 0 ? "No model connected yet" : "Your models"}
@@ -33,10 +35,67 @@ export function ModelPicker({ providers, provider, model, onChange, onManageKeys
           selected: view.provider === provider,
           onSelect: () => onChange(view.provider, view.defaultModel),
         })),
-        ...(connected.length === 0 ? [] : ["separator" as const]),
+        ...(connected.length === 0 ? [] : ["separator" as const, { label: "Another model…", description: "Any model id your provider offers", onSelect: () => setOtherOpen(true) }]),
         { label: "Model providers…", onSelect: onManageKeys },
       ]}
     />
+    <OtherModelDialog open={otherOpen} onOpenChange={setOtherOpen} connected={connected} provider={provider} model={model} onSave={onChange} />
+    </>
+  );
+}
+
+/** Pick any model a connected provider serves, by id: a free OpenRouter model, a Grok release, a local Ollama tag. */
+function OtherModelDialog({ open, onOpenChange, connected, provider, model, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; connected: ProviderKeyView[]; provider: Provider | null; model: string; onSave: (provider: Provider, model: string) => void }) {
+  const [draftProvider, setDraftProvider] = useState<Provider | null>(provider);
+  const [draftModel, setDraftModel] = useState(model);
+  const chosen = draftProvider ?? connected[0]?.provider ?? null;
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          setDraftProvider(provider !== null && connected.some((view) => view.provider === provider) ? provider : (connected[0]?.provider ?? null));
+          setDraftModel(model);
+        }
+        onOpenChange(next);
+      }}
+      title="Another model"
+      description="Type the model id exactly as the provider lists it. The run fails at the first step if the provider does not know it."
+      width={480}
+    >
+      <form
+        className={styles.dialogForm}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (chosen === null || draftModel.trim() === "") return;
+          onSave(chosen, draftModel.trim());
+          onOpenChange(false);
+        }}
+      >
+        {connected.length > 1 ? (
+          <SegmentedControl<Provider>
+            label="Provider"
+            value={chosen ?? connected[0]!.provider}
+            onChange={setDraftProvider}
+            segments={connected.map((view) => ({ value: view.provider, label: PROVIDER_COPY[view.provider].name }))}
+          />
+        ) : null}
+        <TextField
+          label="Model id"
+          placeholder={chosen === null ? "" : PROVIDER_COPY[chosen].modelExample}
+          hint={chosen === "openrouter" ? "For example x-ai/grok-4, or a model ending in :free." : undefined}
+          value={draftModel}
+          onChange={(event) => setDraftModel(event.target.value)}
+          autoFocus
+          spellCheck={false}
+          className={styles.mono}
+        />
+        <div className={styles.dialogActions}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={chosen === null || draftModel.trim() === ""}>Use model</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

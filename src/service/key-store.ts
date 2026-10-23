@@ -32,10 +32,14 @@ function describe(provider: Provider) {
 }
 
 /** What may be shown about a secret: never the key, only its last four characters and, for a custom endpoint, its URL. */
-function secretDetails(provider: Provider, secret: string): { last4: string; endpoint?: string } {
+function secretDetails(provider: Provider, secret: string): { last4: string; endpoint?: string; model?: string } {
   if (provider === "custom") {
     const endpoint = decodeCustomCredential(secret);
-    return { last4: endpoint.apiKey === NO_KEY ? "none" : endpoint.apiKey.slice(-4), endpoint: endpoint.baseUrl };
+    return {
+      last4: endpoint.apiKey === NO_KEY ? "none" : endpoint.apiKey.slice(-4),
+      endpoint: endpoint.baseUrl,
+      ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
+    };
   }
   if (secret.length < 8 || secret.length > 500) throw new Error("The key must be between 8 and 500 characters.");
   return { last4: secret.slice(-4) };
@@ -46,6 +50,8 @@ interface StoredKey {
   ciphertext: string;
   last4: string;
   endpoint?: string;
+  /** A custom endpoint's chosen model, shown as its default. */
+  model?: string;
   verified: boolean;
   updatedAt: string;
 }
@@ -73,6 +79,8 @@ const KEYCHAIN_SERVICE = "dev.caramel.app";
 interface IndexEntry {
   last4: string;
   endpoint?: string;
+  /** A custom endpoint's chosen model, shown as its default. */
+  model?: string;
   verified: boolean;
   updatedAt: string;
 }
@@ -102,6 +110,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
     const index = (await this.readIndex())[userId] ?? {};
     return PROVIDERS.map((provider) => ({
       ...describe(provider),
+      ...(index[provider]?.model === undefined ? {} : { defaultModel: index[provider]!.model! }),
       last4: index[provider]?.last4 ?? null,
       endpoint: index[provider]?.endpoint ?? null,
       verified: index[provider]?.verified ?? false,
@@ -183,6 +192,7 @@ export class KeyStore implements ProviderKeyStore {
     const keys = await this.read(userId);
     return PROVIDERS.map((provider) => ({
       ...describe(provider),
+      ...(keys[provider]?.model === undefined ? {} : { defaultModel: keys[provider]!.model! }),
       last4: keys[provider]?.last4 ?? null,
       endpoint: keys[provider]?.endpoint ?? null,
       verified: keys[provider]?.verified ?? false,

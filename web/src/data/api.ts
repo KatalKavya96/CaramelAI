@@ -48,6 +48,8 @@ export function apiErrorMessage(status: number, code: string, issues: readonly s
       return message ?? "You already have a run in progress. Wait for it to finish or cancel it.";
     case "bad_host":
       return "Open Caramel from the address the app printed (127.0.0.1), not localhost.";
+    case "connect_unavailable":
+      return "This provider cannot be connected by signing in. Paste a key instead.";
     case "network_error":
       return "Caramel's server could not be reached. Check your connection and try again.";
     default:
@@ -109,7 +111,10 @@ export function createApiClient({ baseUrl = "", fetcher = (input, init) => fetch
     eventsUrl: (id: string) => `${baseUrl}/api/runs/${encodeURIComponent(id)}/events`,
 
     listProviders: () => json<ProviderKeyView[]>("/api/providers"),
-    saveKey: (provider: Provider, key: string) => json<SavedKeyView>(`/api/providers/${provider}/key`, send("PUT", { key })),
+    saveKey: (provider: Provider, key: string, endpoint?: { baseUrl: string; model: string }) =>
+      json<SavedKeyView>(`/api/providers/${provider}/key`, send("PUT", { key, ...endpoint })),
+    /** Starts a browser sign-in that saves a key by itself; returns the page to open. */
+    connectProvider: (provider: Provider) => json<{ url: string }>(`/api/providers/${provider}/connect`, send("POST")),
     testKey: (provider: Provider) => json<KeyTestResult>(`/api/providers/${provider}/test`, send("POST")),
     deleteKey: (provider: Provider) => request(`/api/providers/${provider}/key`, { method: "DELETE" }).then(() => undefined),
   };
