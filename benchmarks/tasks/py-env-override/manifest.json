@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "py-env-override",
+  "title": "Crash when settings come from environment variables",
+  "language": "python",
+  "split": "held_out",
+  "issue": "beacon 1.4 won't start in Docker: TypeError in config.py\n\nAfter upgrading from 1.3.2 to 1.4.0 our container exits immediately. I think the INI parsing broke in 1.4, because the traceback is in config.py and the only thing in our image that touches config is `beacon.ini`.\n\ndocker-compose.yml:\n\n```yaml\nservices:\n  status:\n    image: ourorg/status:latest\n    command: python -m beacon check --config /etc/beacon.ini\n    environment:\n      BEACON_PORT: \"9000\"\n      BEACON_DEBUG: \"false\"\n```\n\n/etc/beacon.ini:\n\n```ini\n[server]\nhost = 0.0.0.0\nlog_level = warning\n```\n\n```\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.12/runpy.py\", line 198, in _run_module_as_main\n  File \"/usr/local/lib/python3.12/site-packages/beacon/__main__.py\", line 25, in <module>\n    raise SystemExit(main(sys.argv[1:]))\n  File \"/usr/local/lib/python3.12/site-packages/beacon/__main__.py\", line 15, in main\n    config = load_config(args.config)\n  File \"/usr/local/lib/python3.12/site-packages/beacon/config.py\", line 65, in load_config\n    validate(config)\n  File \"/usr/local/lib/python3.12/site-packages/beacon/config.py\", line 40, in validate\n    if not 1 <= config[\"port\"] <= 65535:\nTypeError: '<=' not supported between instances of 'int' and 'str'\n```\n\nSame image with 1.3.2 works fine. Maybe configparser changed in Python 3.12?",
+  "fixtureSha256": "e07a19aed374d39b9980ab72728ac9ace61fa390fbc7779aa391dfd96d42abf2",
+  "evaluatorSha256": "eec87ec721d6488c2ef3513b7afdda8b94cf8d5ae845f2749850c5ba149b2ea0",
+  "solutionSha256": "5bbbecee2de001c88f7df2cc9f71ded5f96135a7225c59ee990529d1b8352e05",
+  "setup": [],
+  "checks": [
+    {
+      "name": "beacon check with BEACON_* variables",
+      "kind": "task",
+      "command": "python3 \"$DINNER_EVALUATOR/test_env.py\"",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "python3 -m unittest discover -s tests -t .",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 14,
+    "maxMinutes": 8,
+    "maxModelCalls": 14
+  }
+}

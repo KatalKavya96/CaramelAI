@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-rename-export",
+  "title": "Rename a misspelled export and keep a deprecated alias",
+  "language": "typescript",
+  "split": "development",
+  "issue": "Typo in the public API: `parseDurration`\n\nThe main export is spelled `parseDurration` (two r's). Every new user trips over it, and autocomplete in my editor never finds it when I type `parseDuration`.\n\nCould we rename it to `parseDuration` everywhere (source, README, tests)? Lots of projects already import the misspelled name, though, so please keep `parseDurration` working as an alias for now and mark it `@deprecated` so editors show it struck through. We'll remove it in 2.0.",
+  "fixtureSha256": "82e1013490458a37e1e0492bd355343b3b1a4286ceb5521d7318ec06d92047f7",
+  "evaluatorSha256": "75b806c40bc978a2719597f6fdd11f3ea709a0d1e626398f602b14a38fb09e59",
+  "solutionSha256": "c4390e425974a118a12ad939c404433f7f61d40fbdbf9b595bd388181567d239",
+  "setup": [],
+  "checks": [
+    {
+      "name": "old and new imports, CLI, deprecation",
+      "kind": "task",
+      "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "bun run test",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 16,
+    "maxMinutes": 8,
+    "maxModelCalls": 16
+  }
+}

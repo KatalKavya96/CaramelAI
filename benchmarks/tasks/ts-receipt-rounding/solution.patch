@@ -1,0 +1,13 @@
+diff --git a/src/money.ts b/src/money.ts
+index fa6ce3e..94298d6 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -1,6 +1,7 @@
+ /** Converts a price in dollars, as written in a cart file, to integer cents. */
+ export function toCents(amount: number): number {
+-  return Math.floor(amount * 100);
++  // Round, not floor: 4.35 * 100 is 434.99999999999994 in floating point.
++  return Math.round(amount * 100);
+ }
+ 
+ export function formatCents(cents: number): string {

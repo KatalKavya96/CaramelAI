@@ -1,0 +1,4 @@
+[
+  { "sku": "ESP", "name": "Espresso", "price": 3.00, "qty": 2 },
+  { "sku": "CRO", "name": "Croissant", "price": 2.50, "qty": 1 }
+]

@@ -49,6 +49,29 @@ export OPENROUTER_MODEL="openai/gpt-5.2"
 
 OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts one task source: `--issue`, `--task`, or `--task-file`. If none is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
+### Providers
+
+| `--provider` | Key variable | Model variable | Default model | Reports cost |
+| --- | --- | --- | --- | --- |
+| `openrouter` | `AI_API_KEY` | `OPENROUTER_MODEL` | `openai/gpt-5.2` | yes |
+| `anthropic` (Claude) | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `claude-opus-5-5` | no, tokens only |
+| `openai` (GPT) | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-5.2` | no, tokens only |
+| `xai` (Grok) | `XAI_API_KEY` | `XAI_MODEL` | `grok-4` | no, tokens only |
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` | `deepseek-flash` | no, tokens only |
+| `qwen` | `QWEN_API_KEY` | `QWEN_MODEL` | `qwen-plus` | no, tokens only |
+| `custom` (any OpenAI-compatible API) | `CUSTOM_BASE_URL`, optional `CUSTOM_API_KEY` | `CUSTOM_MODEL` | none, required | no, tokens only |
+
+All of them live in `src/model/providers.ts`; adding a provider is one entry there. Without `--provider`,
+the CLI uses OpenRouter when `AI_API_KEY` is set, otherwise the first provider whose key is set.
+
+`custom` works with anything that speaks OpenAI's Chat Completions API: Ollama, LM Studio, vLLM, Groq,
+Together and most new labs. The base URL must use https, or plain http only for `localhost`, so a key
+never crosses a network unencrypted. It is available in the desktop app and CLI, not on a shared server.
+
+```bash
+CUSTOM_BASE_URL=http://localhost:11434/v1 bun run src/cli.ts --provider custom --model qwen2.5-coder --repo . --task "..."
+```
+
 Direct DeepSeek runs use the OpenAI-compatible API without routing through OpenRouter:
 
 ```bash

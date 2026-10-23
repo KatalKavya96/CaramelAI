@@ -12,7 +12,8 @@ import {
   type AgentPlan,
   type PlanAnswer,
 } from "./agent";
-import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "./model";
+import { createDeepSeekModel } from "./model";
+import { PROVIDER_INFO } from "./model/providers";
 import { fetchGitHubIssueTask, type IssueFetcher } from "./issue";
 import {
   collectInteractiveRunArguments,
@@ -173,9 +174,7 @@ export async function runCli(
             model: config.model,
             ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: config.reasoningEffort }),
           })
-        : config.provider === "qwen"
-          ? createQwenModel({ apiKey: config.apiKey!, model: config.model })
-          : createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
+        : PROVIDER_INFO[config.provider].create({ apiKey: config.apiKey!, model: config.model })
       : await loadFakeModelScript(config.modelScriptPath);
     const runOptions: Parameters<typeof runAutonomousTask>[0] = {
       repoPath: config.repoPath,
@@ -206,6 +205,7 @@ export async function runCli(
         task: config.task,
         repositoryContext: await planRepositoryContext(config.repoPath, config.task),
       });
+      runOptions.priorUsage = planResult.usage;
       if (planResult.skippedReason !== undefined) {
         stdout(`\n⚠️  Plan generation skipped: ${planResult.skippedReason}\n`);
       }

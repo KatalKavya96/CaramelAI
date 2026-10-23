@@ -1,0 +1,133 @@
+diff --git a/README.md b/README.md
+index e00066c..c356a72 100644
+--- a/README.md
++++ b/README.md
+@@ -3,10 +3,10 @@
+ Timeouts and retries configured with human durations.
+ 
+ ```ts
+-import { parseDurration, withTimeout, retry } from "waitkit";
++import { parseDuration, withTimeout, retry } from "waitkit";
+ 
+-parseDurration("1h30m"); // 5400000
+-parseDurration("250ms"); // 250
++parseDuration("1h30m"); // 5400000
++parseDuration("250ms"); // 250
+ 
+ await withTimeout(fetch(url), "10s");
+ await retry(() => flakyCall(), { attempts: 3, delay: "500ms" });
+@@ -20,7 +20,8 @@ bun run src/cli.ts 1h30m   # prints 5400000
+ 
+ ## API
+ 
+-- `parseDurration(text)`: milliseconds for a duration such as `"2m"`, `"1h30m"`, `"1.5s"` or `"250ms"`.
++- `parseDuration(text)`: milliseconds for a duration such as `"2m"`, `"1h30m"`, `"1.5s"` or `"250ms"`.
+   Throws a `RangeError` for anything else.
++- `parseDurration(text)`: deprecated misspelling of `parseDuration`, kept until 2.0.
+ - `withTimeout(promise, duration)`: rejects with `TimeoutError` if the promise takes longer.
+ - `retry(fn, { attempts, delay })`: calls `fn` until it resolves, waiting `delay` between attempts.
+diff --git a/src/cli.ts b/src/cli.ts
+index d285e0b..aa2bbd6 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseDurration } from "./duration";
++import { parseDuration } from "./duration";
+ 
+ const [text] = process.argv.slice(2);
+ if (text === undefined) {
+@@ -6,7 +6,7 @@ if (text === undefined) {
+   process.exit(1);
+ }
+ try {
+-  console.log(parseDurration(text));
++  console.log(parseDuration(text));
+ } catch (error) {
+   console.error((error as Error).message);
+   process.exit(1);
+diff --git a/src/duration.ts b/src/duration.ts
+index f181433..2ef168e 100644
+--- a/src/duration.ts
++++ b/src/duration.ts
+@@ -2,7 +2,7 @@ const UNIT_MS: Record<string, number> = { ms: 1, s: 1_000, m: 60_000, h: 3_600_0
+ const PART = /(\d+(?:\.\d+)?)(ms|s|m|h|d)/g;
+ 
+ /** Milliseconds for a human duration such as "2m", "1h30m", "1.5s" or "250ms". */
+-export function parseDurration(text: string): number {
++export function parseDuration(text: string): number {
+   const trimmed = text.trim();
+   let total = 0;
+   let consumed = 0;
+@@ -14,3 +14,6 @@ export function parseDurration(text: string): number {
+   if (trimmed === "" || consumed !== trimmed.length) throw new RangeError(`Not a duration: "${text}"`);
+   return Math.round(total);
+ }
++
++/** @deprecated Misspelled. Use {@link parseDuration}; this alias goes away in 2.0. */
++export const parseDurration = parseDuration;
+diff --git a/src/index.ts b/src/index.ts
+index 8868fb7..fe14386 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,3 +1,3 @@
+-export { parseDurration } from "./duration";
++export { parseDuration, parseDurration } from "./duration";
+ export { retry } from "./retry";
+ export { TimeoutError, withTimeout } from "./timeout";
+diff --git a/src/retry.ts b/src/retry.ts
+index 74c0090..c326edf 100644
+--- a/src/retry.ts
++++ b/src/retry.ts
+@@ -1,7 +1,7 @@
+-import { parseDurration } from "./duration";
++import { parseDuration } from "./duration";
+ 
+ export async function retry<T>(fn: () => Promise<T>, options: { attempts: number; delay: string }): Promise<T> {
+-  const delayMs = parseDurration(options.delay);
++  const delayMs = parseDuration(options.delay);
+   let lastError: unknown;
+   for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+     try {
+diff --git a/src/timeout.ts b/src/timeout.ts
+index 78dad48..f20e068 100644
+--- a/src/timeout.ts
++++ b/src/timeout.ts
+@@ -1,4 +1,4 @@
+-import { parseDurration } from "./duration";
++import { parseDuration } from "./duration";
+ 
+ export class TimeoutError extends Error {
+   constructor(readonly ms: number) {
+@@ -8,7 +8,7 @@ export class TimeoutError extends Error {
+ }
+ 
+ export function withTimeout<T>(promise: Promise<T>, duration: string): Promise<T> {
+-  const ms = parseDurration(duration);
++  const ms = parseDuration(duration);
+   let timer: ReturnType<typeof setTimeout> | undefined;
+   const timeout = new Promise<never>((_, reject) => {
+     timer = setTimeout(() => reject(new TimeoutError(ms)), ms);
+diff --git a/test/duration.test.ts b/test/duration.test.ts
+index 0b0a2f6..52ff577 100644
+--- a/test/duration.test.ts
++++ b/test/duration.test.ts
+@@ -1,13 +1,13 @@
+ import { expect, test } from "bun:test";
+-import { parseDurration } from "../src";
++import { parseDuration } from "../src";
+ 
+ test("parses single and compound durations", () => {
+-  expect(parseDurration("250ms")).toBe(250);
+-  expect(parseDurration("1.5s")).toBe(1500);
+-  expect(parseDurration("1h30m")).toBe(5_400_000);
++  expect(parseDuration("250ms")).toBe(250);
++  expect(parseDuration("1.5s")).toBe(1500);
++  expect(parseDuration("1h30m")).toBe(5_400_000);
+ });
+ 
+ test("rejects things that are not durations", () => {
+-  expect(() => parseDurration("soon")).toThrow(RangeError);
+-  expect(() => parseDurration("10")).toThrow(RangeError);
++  expect(() => parseDuration("soon")).toThrow(RangeError);
++  expect(() => parseDuration("10")).toThrow(RangeError);
+ });

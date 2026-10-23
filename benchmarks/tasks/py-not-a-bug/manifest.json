@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "py-not-a-bug",
+  "title": "Half of a bug report is expected behaviour",
+  "language": "python",
+  "split": "held_out",
+  "issue": "Duplicate subscribers after importing the Mailchimp export\n\nWe moved our list over from Mailchimp and ran `python3 -m listclean dedupe export.txt` before the first send. Several people still got the newsletter twice and one complained. The duplicates that got through look like this:\n\n```\njordan@fastmail.com\njordan@fastmail.com \nPriya.N@gmail.com\npriya.n@gmail.com\n```\n\n(the second jordan line has a trailing space, it came like that from the export)\n\nBoth pairs are obviously the same person. Can dedupe treat them as one? Happy to test a fix on our real list (about 4,000 addresses).",
+  "fixtureSha256": "c8bda02aa4e8a8dc8f57433fe753ffe0856e7d504b95f2e61ed472fb8c33ab56",
+  "evaluatorSha256": "881dc67578f9c73463dac45ffb77c7aa75b491ca730fdff251b853dc3933aeb9",
+  "solutionSha256": "dbc04e397c9c47b663761bef49f2a8acc9a0816db91c59156f838d7c1bd8237a",
+  "setup": [],
+  "checks": [
+    {
+      "name": "the reporter's export through the CLI",
+      "kind": "task",
+      "command": "python3 \"$DINNER_EVALUATOR/test_issue.py\"",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "python3 -m unittest discover -s tests -t .",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 12,
+    "maxMinutes": 6,
+    "maxModelCalls": 12
+  }
+}

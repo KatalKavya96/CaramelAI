@@ -1,0 +1,10 @@
+{
+  "name": "waitkit",
+  "version": "1.6.0",
+  "description": "Small helpers for timeouts and retries, configured with human durations like \"1h30m\".",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test ./test"
+  }
+}
