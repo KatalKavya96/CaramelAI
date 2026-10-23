@@ -85,6 +85,34 @@ describe("OpenRouter model transport", () => {
   });
 });
 
+describe("OpenRouter error detail", () => {
+  test("keeps the upstream provider and its raw reply, not just \"Provider returned error\"", async () => {
+    const { OpenRouterTransport } = await import("../src/model");
+    const body = JSON.stringify({ error: { message: "Provider returned error", code: 400, metadata: { provider_name: "Poolside", raw: "{\"error\":\"response_format json_schema is not supported\"}" } } });
+    const failed = Object.assign(new Error("Provider returned error"), { statusCode: 400, body });
+    const transport = new OpenRouterTransport({ chat: { send: async () => { throw failed; } } }, "m");
+    const error: any = await transport.send({ messages: [] }, new AbortController().signal).catch((caught: unknown) => caught);
+    expect(error.kind).toBe("permanent");
+    expect(error.message).toBe('Provider returned error (code 400, provider Poolside): {"error":"response_format json_schema is not supported"}');
+  });
+
+  test("reads an error that arrives inside a 200 response's choice", async () => {
+    const { OpenRouterTransport } = await import("../src/model");
+    const transport = new OpenRouterTransport({
+      chat: { send: async () => ({ choices: [{ message: { content: "" }, error: { message: "Upstream timed out", code: 502, metadata: { provider_name: "Flint" } } }] }) },
+    }, "m");
+    const error: any = await transport.send({ messages: [] }, new AbortController().signal).catch((caught: unknown) => caught);
+    expect(error.kind).toBe("transient");
+    expect(error.message).toBe("Upstream timed out (code 502, provider Flint)");
+  });
+
+  test("falls back to the SDK's message when the body is not JSON", async () => {
+    const { describeOpenRouterError } = await import("../src/model/openrouter");
+    expect(describeOpenRouterError("", "Bad gateway")).toBe("Bad gateway");
+    expect(describeOpenRouterError("upstream exploded", "Bad gateway")).toBe("Bad gateway: upstream exploded");
+  });
+});
+
 describe("OpenRouter rate limits", () => {
   test("carries the provider's Retry-After into the retry delay", async () => {
     const { OpenRouterTransport, ModelTransportError } = await import("../src/model");
