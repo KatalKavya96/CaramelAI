@@ -53,6 +53,8 @@ export interface AppOptions {
    * hostname, so on a local server anything but the expected host is refused before routing.
    */
   allowedHosts?: readonly string[];
+  /** Starts a sign-in that connects a provider without pasting a key; returns the URL to open. */
+  connectProvider?: (provider: Provider) => Promise<{ url: string }> | null;
 }
 
 /**
@@ -231,6 +233,12 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
           const tested = await testKey(id, key);
           await options.keys.markVerified(userId, id, tested.ok);
           return json(tested);
+        }
+        case "POST providers/:id/connect": {
+          if (!isProvider(id)) return fail(404, "not_found");
+          const started = options.connectProvider?.(id) ?? null;
+          if (started === null) return fail(404, "connect_unavailable", { provider: id });
+          return json(await started);
         }
         case "DELETE providers/:id/key":
           if (!isProvider(id)) return fail(404, "not_found");
