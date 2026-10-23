@@ -4,10 +4,10 @@ export type Theme = "light" | "dark";
 const KEY = "caramel-site-theme";
 
 function current(): Theme {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
-/** A fresh page opening is dark; only refreshes retain this tab's selected theme. */
+/** A fresh page opening is light; only refreshes retain this tab's selected theme. */
 export function useThemeToggle(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(current);
   useEffect(() => {
