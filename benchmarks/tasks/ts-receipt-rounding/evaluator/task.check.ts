@@ -28,11 +28,17 @@ test("the cart from the issue totals $10.25 before tax", () => {
   expect(out).toContain("Total: $11.07");
 });
 
-test("prices like 19.99 and 0.29 keep every cent", () => {
-  const { out } = receipt([{ sku: "BNS", name: "Beans 1kg", price: 19.99, qty: 3 }, { sku: "SUG", name: "Sugar stick", price: 0.29, qty: 1 }]);
+test("prices like 19.99, 0.29 and 1.10 keep every cent, no more and no less", () => {
+  const { out } = receipt([
+    { sku: "BNS", name: "Beans 1kg", price: 19.99, qty: 3 },
+    { sku: "SUG", name: "Sugar stick", price: 0.29, qty: 1 },
+    // 1.10 * 100 is 110.00000000000001: rounding up instead of down would charge $1.11.
+    { sku: "TEA", name: "Tea", price: 1.1, qty: 1 },
+  ]);
   expect(out).toContain("3 x Beans 1kg  $59.97");
   expect(out).toContain("1 x Sugar stick  $0.29");
-  expect(out).toContain("Subtotal: $60.26");
+  expect(out).toContain("1 x Tea  $1.10");
+  expect(out).toContain("Subtotal: $61.36");
 });
 
 test("discounts still round down to the cent, as the README promises", () => {

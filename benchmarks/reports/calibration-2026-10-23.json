@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-10-23T00:00:00.000Z",
-  "harnessRevision": "29320e5",
-  "taskSetSha256": "8aab3c9b3cf646b626ca667be9ed50e79445943424adf2705b03a2920584f69e",
+  "harnessRevision": "36ac12f",
+  "taskSetSha256": "e1c7d2a9067dd710698035e6bb691385557cfa20f20324a93885f00063208787",
   "taskSet": {
     "total": 15,
     "development": 10,
