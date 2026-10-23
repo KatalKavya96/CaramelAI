@@ -61,8 +61,28 @@ export function describeOpenRouterError(payload: unknown, fallback: string): str
   return parts.join(" ").replace(" :", ":");
 }
 
+/**
+ * The status OpenRouter put in the error itself. When a free model's shared upstream pool is
+ * exhausted, "Provider returned error" carries code 429 there; reading only the HTTP layer
+ * reported it as a generic transport failure instead of a rate limit.
+ */
+function errorCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const typed = (error as { error?: { code?: unknown } }).error?.code;
+  if (typeof typed === "number") return typed;
+  const body = (error as { body?: unknown }).body;
+  if (typeof body !== "string") return undefined;
+  try {
+    const code = (JSON.parse(body) as { error?: { code?: unknown } }).error?.code;
+    return typeof code === "number" ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function transportError(error: unknown): ModelTransportError {
-  const status = statusCode(error);
+  const code = errorCode(error);
+  const status = code === 429 || code === 401 || code === 403 ? code : (statusCode(error) ?? code);
   const base = error instanceof Error ? error.message : "OpenRouter request failed.";
   const body = typeof error === "object" && error !== null ? (error as { body?: unknown }).body : undefined;
   const message = body === undefined ? base : describeOpenRouterError(body, base);
@@ -123,7 +143,8 @@ export class OpenRouterTransport implements ModelTransport {
       // A provider can fail after OpenRouter accepted the request: the error then rides in the choice.
       const choiceError = result.choices[0]?.error;
       if (choiceError !== undefined && choiceError !== null) {
-        throw new ModelTransportError("transient", describeOpenRouterError({ error: choiceError }, "Provider returned error"));
+        const rateLimited = (choiceError as { code?: unknown }).code === 429;
+        throw new ModelTransportError(rateLimited ? "rate_limit" : "transient", describeOpenRouterError({ error: choiceError }, "Provider returned error"));
       }
       return { output: textContent(result.choices[0]?.message?.content), usage };
     } catch (error) {

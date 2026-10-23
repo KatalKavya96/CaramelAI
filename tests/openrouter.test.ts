@@ -114,6 +114,17 @@ describe("OpenRouter error detail", () => {
 });
 
 describe("OpenRouter rate limits", () => {
+  test("a free model's upstream 429 inside \"Provider returned error\" is a rate limit, with the reason kept", async () => {
+    const { OpenRouterTransport } = await import("../src/model");
+    const body = JSON.stringify({ error: { message: "Provider returned error", code: 429, metadata: { raw: "poolside/laguna-s-2.1:free is temporarily rate-limited upstream.", provider_name: "Poolside" } } });
+    // No HTTP status on the error: the code exists only in the body.
+    const failed = Object.assign(new Error("Provider returned error"), { body });
+    const transport = new OpenRouterTransport({ chat: { send: async () => { throw failed; } } }, "m");
+    const error: any = await transport.send({ messages: [] }, new AbortController().signal).catch((caught: unknown) => caught);
+    expect(error.kind).toBe("rate_limit");
+    expect(error.message).toBe("Provider returned error (code 429, provider Poolside): poolside/laguna-s-2.1:free is temporarily rate-limited upstream.");
+  });
+
   test("carries the provider's Retry-After into the retry delay", async () => {
     const { OpenRouterTransport, ModelTransportError } = await import("../src/model");
     const rateLimited = Object.assign(new Error("Too many requests"), {
