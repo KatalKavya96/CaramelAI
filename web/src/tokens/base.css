@@ -79,3 +79,9 @@ a {
   animation-duration: 0.01ms !important;
   transition-duration: 0.01ms !important;
 }
+
+.skip-link { position:fixed; top:-80px; left:16px; z-index:100; padding:12px 18px; background:var(--surface-solid); color:var(--text); border:1px solid var(--border); border-radius:var(--radius-md); }
+.skip-link:focus { top:12px; }
+.app-feedback { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:100; display:flex; align-items:center; gap:16px; padding:14px 18px; max-width:calc(100vw - 32px); background:var(--surface-solid); color:var(--text); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-md); }
+.app-feedback button { cursor:pointer; color:var(--text); background:none; border:0; text-decoration:underline; padding:8px; }
+#main { scroll-margin-top:76px; }

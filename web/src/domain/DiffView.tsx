@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { DiffFile } from "../lib/diff";
-import { ChevronDownIcon, ChevronRightIcon, DocIcon } from "../ui";
+import { Button, ChevronDownIcon, ChevronRightIcon, DocIcon } from "../ui";
 import styles from "./DiffView.module.css";
 
 const CHANGE: Record<DiffFile["change"], string> = { added: "A", deleted: "D", modified: "M", renamed: "R" };
@@ -34,9 +34,11 @@ export function ChangedFiles({ files, onSelect }: { files: DiffFile[]; onSelect?
 
 /** Unified diff, one collapsible block per file, with old and new line numbers. */
 export function DiffView({ files }: { files: DiffFile[] }) {
+  const [wrap, setWrap] = useState(true);
   if (files.length === 0) return <p className={styles.empty}>No file changes.</p>;
   return (
-    <div className={styles.diff}>
+    <div className={[styles.diff, wrap ? styles.wrapLines : ""].join(" ")}>
+      <Button size="sm" onClick={() => setWrap(value => !value)} aria-pressed={wrap}>{wrap ? "Line wrapping on" : "Line wrapping off"}</Button>
       {files.map((file) => <FileDiff key={file.path} file={file} />)}
     </div>
   );
@@ -55,6 +57,7 @@ function FileDiff({ file }: { file: DiffFile }) {
       {open ? (
         <div className={styles.scroll} tabIndex={0} aria-label={`Changes in ${file.path}`}>
           <table className={styles.table}>
+            <colgroup><col className={styles.numberColumn}/><col className={styles.numberColumn}/><col/></colgroup>
             <tbody>
               {file.lines.filter((line) => line.kind !== "meta").map((line, index) =>
                 line.kind === "hunk" ? (

@@ -13,7 +13,7 @@ export interface ProviderCopy {
 export const PROVIDER_COPY: Record<Provider, ProviderCopy> = {
   openrouter: {
     name: "OpenRouter",
-    blurb: "One key for Claude, GPT, Grok, DeepSeek and more, including free models. Shows what each run cost.",
+    blurb: "One key for Claude, GPT, Grok, DeepSeek and more, including free models. Provider usage is billed to your account.",
     keyUrl: "https://openrouter.ai/keys",
     keyHint: "Starts with sk-or-",
     modelExample: "qwen/qwen3-coder:free",

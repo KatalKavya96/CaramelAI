@@ -3,6 +3,7 @@ import { Outlet, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { useApi, useCancelRun, useCapabilities, useLogout, useRuns } from "../data";
 import { StatusIcon } from "../domain";
 import type { RunView } from "../lib/contract";
+import { downloadText } from "../lib/download";
 import { taskTitle } from "../lib/format";
 import { isActive } from "../lib/status";
 import { AppShell, ConfirmDialog, Sidebar, SidebarRail, type SidebarLink } from "../patterns";
@@ -37,6 +38,7 @@ export function Layout({ login }: { login: string }) {
       return false;
     }
   });
+  const [feedback, setFeedback] = useState("");
   const [cancelId, setCancelId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,20 +49,32 @@ export function Layout({ login }: { login: string }) {
     }
   }, [collapsed]);
 
-  useEffect(() => setDrawerOpen(false), [location.pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+    if (document.activeElement === document.body) document.getElementById("main")?.focus({ preventScroll: true });
+  }, [location.pathname]);
 
-  // ⌘K / Ctrl+K starts a new run, as on the mockup's "New chat" button. Browsers do not reserve it.
+  // Search uses the same shortcut on the landing page and in the app.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        navigate("/");
+        ui.setSearchOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate]);
+  }, [ui.setSearchOpen]);
 
+  const copyLink = async (url: string) => {
+    try { await navigator.clipboard.writeText(url); setFeedback("Link copied."); }
+    catch { setFeedback("Could not copy the link. Copy this page’s address instead."); }
+  };
+  const downloadPatch = async (id: string) => {
+    setFeedback("Preparing patch…");
+    try { downloadText(await api.getPatch(id), `caramel-${id}.patch`); setFeedback("Patch download requested. Check your browser’s downloads."); }
+    catch (error) { setFeedback(error instanceof Error ? error.message : "Could not prepare the patch. Try again."); }
+  };
   const go = (path: string) => () => navigate(path);
   const all = runs.data ?? [];
   const roots = threadRoots(all);
@@ -93,7 +107,7 @@ export function Layout({ login }: { login: string }) {
 
   const sidebar = (
     <Sidebar
-      primary={{ label: "New run", shortcut: "⌘K", onClick: go("/") }}
+      primary={{ label: "New run", onClick: go("/") }}
       links={links}
       onCollapse={() => setCollapsed(true)}
       sections={[
@@ -115,9 +129,9 @@ export function Layout({ login }: { login: string }) {
                   onSelect: go(`/runs/${run.id}`),
                   menuItems: [
                     { label: "Open", onSelect: go(`/runs/${run.id}`) },
-                    { label: "Copy link", onSelect: () => void navigator.clipboard?.writeText(`${window.location.origin}/runs/${run.id}`) },
-                    ...(latest.changedFiles.length > 0 ? [{ label: "Download patch", onSelect: () => window.open(api.patchUrl(latest.id), "_blank") }] : []),
-                    ...(isActive(latest.status) ? ["separator" as const, { label: "Cancel run", danger: true, onSelect: () => setCancelId(latest.id) }] : []),
+                    { label: "Copy link", onSelect: () => { void copyLink(`${window.location.origin}/runs/${run.id}`); } },
+                    ...(latest.changedFiles.length > 0 ? [{ label: "Download patch", onSelect: () => { void downloadPatch(latest.id); } }] : []),
+                    ...(isActive(latest.status) ? ["separator" as const, { label: "Cancel run", danger: true, onSelect: () => { cancel.reset(); setCancelId(latest.id); } }] : []),
                   ],
                 };
               }),
@@ -140,6 +154,8 @@ export function Layout({ login }: { login: string }) {
 
   return (
     <>
+      <a className="skip-link" href="#main">Skip to content</a>
+      {feedback ? <div className="app-feedback" role="status">{feedback}<button type="button" onClick={() => setFeedback("")}>Dismiss</button></div> : null}
       <AppShell
         sidebar={sidebar}
         rail={<SidebarRail onExpand={() => setCollapsed(false)} onPrimary={go("/")} links={links} />}
@@ -161,7 +177,8 @@ export function Layout({ login }: { login: string }) {
         cancelLabel="Keep running"
         destructive
         busy={cancel.isPending}
-        onConfirm={() => cancelId !== null && cancel.mutate(cancelId, { onSettled: () => setCancelId(null) })}
+        {...(cancel.error ? { error: cancel.error.message } : {})}
+        onConfirm={() => cancelId !== null && cancel.mutate(cancelId, { onSuccess: () => setCancelId(null) })}
       />
     </>
   );

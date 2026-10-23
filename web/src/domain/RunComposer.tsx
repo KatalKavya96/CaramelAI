@@ -45,7 +45,7 @@ export function ModelPicker({ providers, provider, model, onChange, onManageKeys
         { label: "Model providers…", onSelect: onManageKeys },
       ]}
     />
-    <OtherModelDialog open={otherOpen} onOpenChange={setOtherOpen} connected={connected} provider={provider} model={model} onSave={onChange} />
+    <OtherModelDialog key={String(otherOpen)} open={otherOpen} onOpenChange={setOtherOpen} connected={connected} provider={provider} model={model} onSave={onChange} />
     </>
   );
 }
@@ -92,7 +92,6 @@ function OtherModelDialog({ open, onOpenChange, connected, provider, model, onSa
           hint={chosen === "openrouter" ? (draftModel.trim() !== "" && isPaidModel(chosen, draftModel.trim()) ? "This model is paid: each run is charged to your key. Free models end in :free." : "Free models end in :free, for example qwen/qwen3-coder:free.") : undefined}
           value={draftModel}
           onChange={(event) => setDraftModel(event.target.value)}
-          autoFocus
           spellCheck={false}
           className={styles.mono}
         />
@@ -112,6 +111,7 @@ export interface RunComposerProps {
   onOptionsChange: (options: RunOptions) => void;
   onSubmit: () => void;
   busy: boolean;
+  providerReady?: boolean;
   capabilities: Capabilities;
   /** Repositories and folders from earlier runs, offered in the repository dialog. */
   recentRepos: { kind: RepoKind; value: string }[];
@@ -127,13 +127,15 @@ export interface RunComposerProps {
  * caramel send button. The model pill is passed in as `trailing`. Repository and checks open
  * small dialogs so the card keeps its shape.
  */
-export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSubmit, busy, capabilities, recentRepos, onPickFolder, trailing, footnote }: RunComposerProps) {
+export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSubmit, busy, providerReady = true, capabilities, recentRepos, onPickFolder, trailing, footnote }: RunComposerProps) {
   const [repoOpen, setRepoOpen] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const preset = BUDGET_PRESETS.find((item) => item.id === options.preset) ?? BUDGET_PRESETS[1];
   const repoMissing = repoError(options, capabilities.repoKinds, capabilities.homeDir) !== null;
-  const canSubmit = task.trim() !== "" && !repoMissing && options.provider !== null;
+  const canSubmit = task.trim() !== "" && !repoMissing && options.provider !== null && providerReady;
   const set = (patch: Partial<RunOptions>) => onOptionsChange({ ...options, ...patch });
+  const readiness = options.provider === null || !providerReady ? "Connect a model provider to start." : repoMissing ? "Choose a repository or folder to start." : task.trim() === "" ? "Describe the change you want to start." : "Ready to start · Enter sends, Shift+Enter adds a line.";
   const canChooseNetwork = capabilities.network.choices.length > 1;
 
   return (
@@ -158,13 +160,22 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
                 {options.gitRef === "" ? "default branch" : options.gitRef}
               </Pill>
             )}
-            <Menu
+            <Pill size="md" icon={<SlidersIcon size={18} />} onClick={() => setAdvancedOpen(true)} aria-haspopup="dialog">Options</Pill>
+          </>
+        }
+        trailing={trailing}
+        footnote={<><span role="status">{busy ? "Starting your run…" : readiness}</span><br />{footnote}</>}
+        showSubmitLabel
+      />
+      <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen} title="Run options" description="Defaults work for most tasks. These are execution limits, not a fixed price." width={520}>
+        <div className={styles.advancedOptions}>
+          <Menu
               width={300}
               header="Budget"
               trigger={<Pill size="md" icon={<SlidersIcon size={18} />} trailingIcon={<ChevronDownIcon size={16} />}>{preset?.label}</Pill>}
               items={BUDGET_PRESETS.map((item) => ({ label: item.label, description: item.description, selected: item.id === options.preset, onSelect: () => set({ preset: item.id }) }))}
             />
-            <Pill size="md" icon={<ShieldIcon size={18} />} pressed={options.checks.length > 0} onClick={() => setChecksOpen(true)} aria-haspopup="dialog">
+            <Pill size="md" icon={<ShieldIcon size={18} />} pressed={options.checks.length > 0} onClick={() => { setAdvancedOpen(false); setChecksOpen(true); }} aria-haspopup="dialog">
               {options.checks.length === 0 ? "Auto checks" : `${options.checks.length} check${options.checks.length === 1 ? "" : "s"}`}
             </Pill>
             {canChooseNetwork ? (
@@ -178,12 +189,10 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
                 {options.network === "full" ? "Network on" : "No network"}
               </Pill>
             ) : null}
-          </>
-        }
-        trailing={trailing}
-        footnote={footnote}
-      />
+          <p>Auto checks use the repository’s own test, build, and lint commands. Provider usage is billed separately.</p></div>
+      </Dialog>
       <RepoDialog
+        key={`repo-${repoOpen}`}
         open={repoOpen}
         onOpenChange={setRepoOpen}
         options={options}
@@ -193,7 +202,7 @@ export function RunComposer({ task, onTaskChange, options, onOptionsChange, onSu
         {...(onPickFolder === undefined ? {} : { onPickFolder })}
         onSave={(patch) => set(patch)}
       />
-      <ChecksDialog open={checksOpen} onOpenChange={setChecksOpen} checks={options.checks} onSave={(checks) => set({ checks })} />
+      <ChecksDialog key={`checks-${checksOpen}`} open={checksOpen} onOpenChange={setChecksOpen} checks={options.checks} onSave={(checks) => set({ checks })} />
     </>
   );
 }
@@ -257,8 +266,7 @@ function RepoDialog({ open, onOpenChange, options, kinds, homeDir, recent, onPic
               value={draft.localPath}
               onChange={(event) => update({ localPath: event.target.value })}
               onBlur={() => setTouched(true)}
-              autoFocus
-              spellCheck={false}
+                  spellCheck={false}
               {...(error === null ? {} : { error })}
             />
             {onPickFolder === undefined ? null : (
@@ -287,8 +295,7 @@ function RepoDialog({ open, onOpenChange, options, kinds, homeDir, recent, onPic
               value={draft.repoUrl}
               onChange={(event) => update({ repoUrl: event.target.value })}
               onBlur={() => setTouched(true)}
-              autoFocus
-              spellCheck={false}
+                  spellCheck={false}
               {...(error === null ? {} : { error })}
             />
             <TextField label="Branch, tag or commit" hint="Leave empty for the default branch." placeholder="main" value={draft.gitRef} onChange={(event) => update({ gitRef: event.target.value })} />
@@ -365,7 +372,7 @@ export function FollowUpComposer({ value, onChange, onSubmit, busy, running, onS
     <Composer
       compact
       label="Follow-up"
-      placeholder={running ? "Caramel is working. You can stop the run, or wait to follow up." : "Ask for a follow-up change…"}
+      placeholder={running ? "Draft a follow-up while Caramel works…" : "Ask for a follow-up change…"}
       submitLabel="Start follow-up run"
       value={value}
       onChange={onChange}
@@ -373,8 +380,8 @@ export function FollowUpComposer({ value, onChange, onSubmit, busy, running, onS
       canSubmit={value.trim() !== "" && disabledReason === undefined}
       busy={busy || running}
       onStop={running ? onStop : undefined}
-      disabled={running || disabledReason !== undefined}
-      footnote={disabledReason ?? "A follow-up starts a new run from this run's result, with the same repository and model."}
+      disabled={disabledReason !== undefined}
+      footnote={disabledReason ?? (running ? "Your draft is kept. Send it when this run finishes." : "A follow-up starts a new run from this run's result, with the same repository and model.")}
     />
   );
 }

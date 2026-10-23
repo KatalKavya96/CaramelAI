@@ -38,7 +38,7 @@ export const SelectField = forwardRef<HTMLSelectElement, Base & SelectHTMLAttrib
     <FieldShell label={label} hint={hint} error={error}>
       {(id, describedBy) => (
         <span className={styles.selectWrap}>
-          <select ref={ref} id={id} aria-describedby={describedBy} className={[styles.input, styles.select, className ?? ""].join(" ")} {...rest}>
+          <select ref={ref} id={id} aria-invalid={error !== undefined} aria-describedby={describedBy} className={[styles.input, styles.select, className ?? ""].join(" ")} {...rest}>
             {children}
           </select>
         </span>

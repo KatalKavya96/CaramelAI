@@ -37,9 +37,9 @@ describe("Quick-start and command palette",()=>{
     const copy=vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}});
     render(<Landing/>);
-    const trigger=screen.getByRole("button",{name:"Get started"});
+    const trigger=screen.getByRole("button",{name:"Set up the CLI"});
     trigger.focus();fireEvent.click(trigger);
-    const dialog=screen.getByRole("dialog",{name:"Start building."});
+    const dialog=screen.getByRole("dialog",{name:"Set up the CLI"});
     expect(within(dialog).getByText("Bun 1.3.x",{exact:false})).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button",{name:"Copy setup commands"}));
     await waitFor(()=>expect(copy).toHaveBeenCalledWith(SETUP_COMMAND));
@@ -51,7 +51,7 @@ describe("Quick-start and command palette",()=>{
   it("reports clipboard failure without claiming the command was copied",async()=>{
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:vi.fn().mockRejectedValue(new Error("Denied"))}});
     render(<Landing/>);
-    fireEvent.click(screen.getByRole("button",{name:"Get started"}));
+    fireEvent.click(screen.getByRole("button",{name:"Set up the CLI"}));
     fireEvent.click(screen.getByRole("button",{name:"Copy run command"}));
     expect(await screen.findByText("Select the command to copy it manually.")).toBeInTheDocument();
     expect(screen.queryByText("Copied")).not.toBeInTheDocument();
@@ -63,7 +63,7 @@ describe("Quick-start and command palette",()=>{
     fireEvent.change(input,{target:{value:"setup"}});
     expect(screen.getAllByRole("option")).toHaveLength(1);
     fireEvent.keyDown(input,{key:"Enter"});
-    expect(await screen.findByRole("dialog",{name:"Start building."})).toBeInTheDocument();
+    expect(await screen.findByRole("dialog",{name:"Set up the CLI"})).toBeInTheDocument();
   });
   it("shows a useful empty state and applies appearance controls without changing the theme",()=>{
     render(<Landing/>);

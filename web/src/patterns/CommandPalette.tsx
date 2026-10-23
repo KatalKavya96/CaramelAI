@@ -8,6 +8,7 @@ export interface PaletteItem {
   id: string;
   title: string;
   snippet?: string;
+  searchText?: string;
   meta?: string;
   group: string;
   icon?: ReactNode;
@@ -53,11 +54,12 @@ export function CommandPalette({ open, onOpenChange, items, groupOrder, placehol
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matches = needle === "" ? items : items.filter((item) => `${item.title} ${item.snippet ?? ""}`.toLowerCase().includes(needle));
+    const matches = needle === "" ? items : items.filter((item) => `${item.title} ${item.snippet ?? ""} ${item.searchText ?? ""}`.toLowerCase().includes(needle));
     return groupOrder.flatMap((group) => matches.filter((item) => item.group === group));
   }, [items, groupOrder, query]);
 
   useEffect(() => setActive(0), [query, open]);
+  useEffect(() => setActive(value => Math.max(0, Math.min(value, filtered.length - 1))), [filtered.length]);
   useEffect(() => {
     if (!open) setQuery("");
   }, [open]);
@@ -73,7 +75,7 @@ export function CommandPalette({ open, onOpenChange, items, groupOrder, placehol
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((value) => Math.min(filtered.length - 1, value + 1));
+      setActive((value) => Math.max(0, Math.min(filtered.length - 1, value + 1)));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActive((value) => Math.max(0, value - 1));
@@ -111,6 +113,7 @@ export function CommandPalette({ open, onOpenChange, items, groupOrder, placehol
               <IconButton label="Close" icon={<CloseIcon size={22} />} />
             </RadixDialog.Close>
           </div>
+          <span className="visually-hidden" role="status">{filtered.length} results</span>
           {filtered.length === 0 ? (
             <EmptyState title={emptyTitle} message={emptyMessage} />
           ) : (

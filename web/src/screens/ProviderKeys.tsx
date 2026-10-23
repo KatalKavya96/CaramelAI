@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiErrorMessage, ApiError, useCapabilities, useConnectProvider, useDeleteKey, useProviders, useSaveKey, useTestKey } from "../data";
+import { PROVIDER_COPY } from "../domain/providers";
+import { Button, SelectField } from "../ui";
 import { ProviderKeyForm } from "../domain";
 import type { KeyTestResult, Provider } from "../lib/contract";
 import { ErrorBanner, Skeleton } from "../patterns";
@@ -24,6 +26,7 @@ function message(error: unknown): string {
 /** Every provider's key form. Used by the setup page and the settings dialog's provider tab. */
 export function ProviderKeys() {
   const providers = useProviders();
+  const [selected, setSelected] = useState<Provider | "">("");
   const capabilities = useCapabilities();
   const save = useSaveKey();
   const test = useTestKey();
@@ -66,7 +69,12 @@ export function ProviderKeys() {
 
   return (
     <div className={styles.stack}>
-      {(providers.data ?? []).map((view) => (
+      <SelectField label="Choose a model provider" value={selected} onChange={event => setSelected(event.target.value as Provider | "")} hint="Connect one provider to get started. You can add others later.">
+        <option value="">Choose a provider…</option>
+        {(providers.data ?? []).map(view => <option key={view.provider} value={view.provider}>{PROVIDER_COPY[view.provider].name}{view.last4 !== null ? " · connected" : ""}</option>)}
+      </SelectField>
+      {connecting ? <div role="status">Waiting for provider sign-in. Finish in the opened browser window. <Button size="sm" onClick={() => { setConnecting(null); setBusy(null); }}>Stop waiting</Button></div> : null}
+      {(providers.data ?? []).filter(view => selected ? view.provider === selected : view.last4 !== null).map((view) => (
         <ProviderKeyForm
           key={view.provider}
           view={view}

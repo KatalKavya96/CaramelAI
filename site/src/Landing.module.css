@@ -86,3 +86,10 @@
 .footer nav button { font:inherit; font-size:11px; padding:0; border:0; background:none; color:var(--text-muted); cursor:pointer; }
 .footer nav button:hover { color:var(--text); }
 @media(max-width:850px){.footer{flex-wrap:wrap}.footer nav{flex-wrap:wrap;row-gap:14px}}
+/* Keep the product example close to the action on laptop-sized screens. */
+.hero { padding-top:122px; }
+.appIcon { margin-bottom:28px; }
+.heroPreview { margin-top:42px; }
+.workflowStrip { margin-top:38px; }
+.heroAction .ctaSecondary { margin-left:12px; }
+@media(max-width:600px){ .hero{padding-top:112px} .heroAction{display:flex;flex-wrap:wrap;justify-content:center;gap:12px} .heroAction .ctaSecondary{margin-left:0} .heroAction .hint{width:100%} }

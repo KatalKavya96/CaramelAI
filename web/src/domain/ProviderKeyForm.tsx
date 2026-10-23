@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { KeyTestResult, ProviderKeyView } from "../lib/contract";
 import { formatWhen } from "../lib/format";
 import { Button, CheckIcon, KeyIcon, TextField } from "../ui";
@@ -37,6 +37,7 @@ export function ProviderKeyForm({ view, busy, lastTest = null, error = null, onS
   const [key, setKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(view.endpoint ?? "");
   const [model, setModel] = useState(custom ? view.defaultModel : "");
+  useEffect(() => { setKey(""); }, [view.updatedAt, view.last4]);
   const saved = view.last4 !== null;
   const canSave = custom ? baseUrl.trim() !== "" && model.trim() !== "" : key.trim() !== "";
   const testMessage = lastTest === null ? null : lastTest.ok ? "Key works." : TEST_COPY[lastTest.error];

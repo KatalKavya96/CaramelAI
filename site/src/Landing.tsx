@@ -26,7 +26,7 @@ function Ctas({ hintId }: { hintId: string }) {
   return <div className={styles.ctas}>
     <div className={styles.ctaRow}>
       <a className={styles.cta} href={LINKS.github}><GitHubIcon size={18} />Star on GitHub</a>
-      <a className={styles.ctaSecondary} href={LINKS.notify} aria-describedby={hintId}><BellIcon />Get notified</a>
+      <a className={styles.ctaSecondary} href={LINKS.notify} aria-describedby={hintId}><BellIcon />Follow releases on GitHub</a>
     </div>
     <p id={hintId} className={styles.hint}>Desktop app coming soon. CLI available now.</p>
   </div>;
@@ -36,7 +36,7 @@ function ProviderPreview() {
   const [provider, setProvider] = useState("DeepSeek");
   return <div className={styles.providerCard}>
     <label htmlFor="provider-preview">Model provider</label>
-    <p>Connect the provider you prefer.</p>
+    <p>Example only · connect a provider in Caramel.</p>
     <div className={styles.providerSelect}><KeyIcon size={17} /><select id="provider-preview" value={provider} onChange={(event) => setProvider(event.target.value)}><option>DeepSeek</option><option>OpenRouter</option><option>Qwen</option></select></div>
     <span className={styles.fieldLabel}>API key</span>
     <div className={styles.exampleKey} aria-label="Illustration of a masked provider key"><span aria-hidden="true">••••••••••••••••••••••••</span><KeyIcon size={15} /></div>
@@ -74,18 +74,18 @@ export function Landing() {
       <section id="top" className={styles.hero} aria-labelledby="hero-title">
         <AmbientGradient theme={theme} reducedMotion={appearance.motion} className={styles.ambient} />
         <div className={styles.appIcon}><LogoMark size={49} /></div>
-        <h1 id="hero-title">Build anything with Caramel.</h1>
-        <p className={styles.lead}>From issue to reviewed patch. Your repo, your model, your checks.</p>
-        <div className={styles.heroAction}><button type="button" className={styles.cta} onClick={() => setOverlay("quickstart")}>Get started <span aria-hidden="true">↗</span></button><p className={styles.hint}>Open-source coding agent · bring your own key</p></div>
+        <h1 id="hero-title">From issue to reviewed change.</h1>
+        <p className={styles.lead}>Describe a change. Review the patch and the checks behind it.</p>
+        <div className={styles.heroAction}><button type="button" className={styles.cta} onClick={() => setOverlay("quickstart")}>Set up the CLI <span aria-hidden="true">↗</span></button><a className={styles.ctaSecondary} href="#product">Try a sample</a><p className={styles.hint}>CLI available now · bring your own model key</p></div>
         <WhatsNewPill hasRelease={hasRelease} latest={updates[0]} />
-        <div className={styles.workflowStrip}><p>Built around your workflow</p><div><span><BranchIcon size={22} />Your repositories</span><span><KeyIcon size={22} />Your model</span><span><ShieldIcon size={22} />Your checks</span><span><DocIcon size={22} />Your review</span></div></div>
         <div id="product" className={styles.heroPreview}><ProductPreview /></div>
+        <div className={styles.workflowStrip}><p>Built around your workflow</p><div><span><BranchIcon size={22} />Your repositories</span><span><KeyIcon size={22} />Your model</span><span><ShieldIcon size={22} />Your checks</span><span><DocIcon size={22} />Your review</span></div></div>
       </section>
       <section id="get-started" className={styles.getStarted} aria-labelledby="start-title">
-        <h2 id="start-title" className={styles.sectionTitle}>Get started</h2><p className={styles.sectionLead}>Start with the CLI today. Follow the desktop app as it takes shape.</p>
+        <h2 id="start-title" className={styles.sectionTitle}>Choose how to get started</h2><p className={styles.sectionLead}>Start with the CLI today. Follow the desktop app as it takes shape.</p>
         <div className={styles.startCards}>
           <article><h3>Caramel CLI</h3><p>A task, a repository, and the model you choose.</p><span className={styles.availability}>Available now</span><button type="button" className={styles.cta} onClick={() => setOverlay("quickstart")}>Start building <span aria-hidden="true">›</span></button></article>
-          <article><h3>Desktop app</h3><p>A focused workspace to follow runs and review the result.</p><span className={styles.availability}>In development</span><a className={styles.cta} href={LINKS.notify}>Get notified <span aria-hidden="true">›</span></a></article>
+          <article><h3>Desktop app</h3><p>A focused workspace to follow runs and review the result.</p><span className={styles.availability}>In development</span><a className={styles.cta} href={LINKS.notify}>Follow releases on GitHub <span aria-hidden="true">›</span></a></article>
           <article><h3>Open source</h3><p>Explore the harness, read the code, and make it your own.</p><span className={styles.availability}>Built in the open</span><a className={styles.cta} href={LINKS.github}>Explore GitHub <span aria-hidden="true">›</span></a></article>
         </div>
       </section>

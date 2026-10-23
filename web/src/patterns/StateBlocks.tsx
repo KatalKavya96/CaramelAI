@@ -41,10 +41,10 @@ export function EmptyState({ title, message, icon, action }: { title: string; me
 /** A block of grey bars shown while content loads. */
 export function Skeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className={styles.skeleton} aria-hidden="true">
+    <div role="status" aria-label="Loading…"><span className="visually-hidden">Loading…</span><div className={styles.skeleton} aria-hidden="true">
       {Array.from({ length: lines }, (_, index) => (
         <span key={index} style={{ width: `${90 - index * 15}%` }} />
       ))}
-    </div>
+    </div></div>
   );
 }
