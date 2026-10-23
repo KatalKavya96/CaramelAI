@@ -10,8 +10,8 @@
   "solutionSha256": "91c6cc00a5a066ec4610dae5e59f9b7e7eb96c14ab4c70ed86e020942d6be0c2",
   "setup": [],
   "checks": [
-    { "name": "hidden edge cases", "kind": "task", "command": "python \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
-    { "name": "public regression suite", "kind": "regression", "command": "python test_stats.py", "timeoutMs": 30000 }
+    { "name": "hidden edge cases", "kind": "task", "command": "python3 \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "python3 test_stats.py", "timeoutMs": 30000 }
   ],
   "budget": { "maxSteps": 10, "maxMinutes": 5, "maxModelCalls": 10 }
 }
