@@ -4,8 +4,8 @@
   "fixtureSha256": "f08d4a51febcc8b4a1379fb48b47f3cdc29aef476e9f3a3736ca33d4274a2810", "evaluatorSha256": "802afc5d89afcb2d1067753a96d2f67db1c05d528df6b62fde80a4b3cced66e8", "solutionSha256": "f8bc845b9506d3ef0bee0658b60f49bd23f0b4c44f2ebd02bccdf3be426c7b5f",
   "setup": [],
   "checks": [
-    { "name": "hidden range cases", "kind": "task", "command": "python \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
-    { "name": "public regression suite", "kind": "regression", "command": "python test_ports.py", "timeoutMs": 30000 }
+    { "name": "hidden range cases", "kind": "task", "command": "python3 \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "python3 test_ports.py", "timeoutMs": 30000 }
   ],
   "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
 }
