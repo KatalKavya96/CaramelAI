@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { type IssueFetcher, formatIssueTask } from "./issue";
 import { SANDBOX_CHOICES, type SandboxChoice } from "./execution/sandbox";
+import { credentialFromEnv, isProvider, PROVIDER_INFO, PROVIDERS, type Provider } from "./model/providers";
 
 export const DEFAULT_BUDGETS = {
   maxSteps: 120,
@@ -23,7 +24,7 @@ export interface RunConfig {
   task: string;
   outputPath: string;
   apiKey?: string;
-  provider: "openrouter" | "deepseek" | "qwen";
+  provider: Provider;
   model: string;
   reasoningEffort?: DeepSeekReasoningEffort;
   modelScriptPath?: string;
@@ -181,11 +182,21 @@ function validateRepository(repo: string | undefined, cwd: string): string {
   return repoPath;
 }
 
+const MODEL_ENV: Record<Provider, string> = {
+  openrouter: "OPENROUTER_MODEL",
+  anthropic: "ANTHROPIC_MODEL",
+  openai: "OPENAI_MODEL",
+  xai: "XAI_MODEL",
+  deepseek: "DEEPSEEK_MODEL",
+  qwen: "QWEN_MODEL",
+  custom: "CUSTOM_MODEL",
+};
+
 function validateProvider(value: string | undefined, source: "--provider" | "MODEL_PROVIDER"): RunConfig["provider"] | undefined {
   if (value === undefined || value.trim() === "") return undefined;
   const provider = value.trim();
-  if (provider === "openrouter" || provider === "deepseek" || provider === "qwen") return provider;
-  throw new ConfigurationError(`${source} must be openrouter, deepseek, or qwen.`);
+  if (isProvider(provider)) return provider;
+  throw new ConfigurationError(`${source} must be one of: ${PROVIDERS.join(", ")}.`);
 }
 
 function resolveProvider(args: RunArguments, env: Record<string, string | undefined>): RunConfig["provider"] {
@@ -195,9 +206,10 @@ function resolveProvider(args: RunArguments, env: Record<string, string | undefi
   const envProvider = validateProvider(env.MODEL_PROVIDER, "MODEL_PROVIDER");
   if (envProvider !== undefined) return envProvider;
 
-  if (!env.AI_API_KEY?.trim() && env.DEEPSEEK_API_KEY?.trim()) return "deepseek";
-  if (!env.AI_API_KEY?.trim() && !env.DEEPSEEK_API_KEY?.trim() && env.QWEN_API_KEY?.trim()) return "qwen";
-  return "openrouter";
+  // No provider named: OpenRouter if its key is set, otherwise the first provider whose key is.
+  if (env.AI_API_KEY?.trim()) return "openrouter";
+  const configured = (provider: Provider) => (provider === "custom" ? env.CUSTOM_BASE_URL : env[PROVIDER_INFO[provider].keyEnv])?.trim();
+  return PROVIDERS.find((provider) => configured(provider)) ?? "openrouter";
 }
 
 function validateReasoningEffort(value: string | undefined): DeepSeekReasoningEffort | undefined {
@@ -255,12 +267,13 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const provider = resolveProvider(args, env);
   const reasoningEffort = validateReasoningEffort(args.reasoningEffort ?? env.DEEPSEEK_REASONING_EFFORT) ??
     (provider === "deepseek" ? "medium" : undefined);
-  const credentialName = provider === "deepseek"
-    ? "DEEPSEEK_API_KEY"
-    : provider === "qwen"
-      ? "QWEN_API_KEY"
-      : "AI_API_KEY";
-  const apiKey = env[credentialName]?.trim();
+  const credentialName = provider === "custom" ? "CUSTOM_BASE_URL" : PROVIDER_INFO[provider].keyEnv;
+  let apiKey: string | undefined;
+  try {
+    apiKey = credentialFromEnv(provider, env);
+  } catch (error) {
+    throw new ConfigurationError(`CUSTOM_BASE_URL: ${(error as Error).message}`);
+  }
 
   if ((apiKey === undefined || apiKey === "") && args.modelScript === undefined) {
     throw new ConfigurationError(`${credentialName} is required for a ${provider} run.`);
@@ -284,11 +297,8 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
     ),
-    model: args.model?.trim() || (provider === "deepseek"
-      ? env.DEEPSEEK_MODEL?.trim() || "deepseek-flash"
-      : provider === "qwen"
-        ? env.QWEN_MODEL?.trim() || "qwen-plus"
-        : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2"),
+    model: args.model?.trim() || env[MODEL_ENV[provider]]?.trim() || PROVIDER_INFO[provider].defaultModel ||
+      (() => { throw new ConfigurationError("A custom endpoint needs a model: pass --model or set CUSTOM_MODEL."); })(),
     planMode: args.plan === "enabled" || args.plan === "true"
       ? true
       : args.plan === undefined || args.plan === "disabled" || args.plan === "false"

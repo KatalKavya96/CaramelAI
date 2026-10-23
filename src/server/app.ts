@@ -15,6 +15,7 @@ import {
   type RunService,
 } from "../service";
 import type { Authenticator } from "./auth";
+import { encodeCustomCredential } from "../model/providers";
 
 /** What this server can do, so one UI adapts to the hosted site and the desktop app. */
 export interface Capabilities {
@@ -53,6 +54,8 @@ export interface AppOptions {
    * hostname, so on a local server anything but the expected host is refused before routing.
    */
   allowedHosts?: readonly string[];
+  /** Starts a sign-in that connects a provider without pasting a key; returns the URL to open. */
+  connectProvider?: (provider: Provider) => Promise<{ url: string }> | null;
 }
 
 /**
@@ -214,15 +217,30 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
             headers: { "content-type": "text/x-diff; charset=utf-8", "content-disposition": `attachment; filename="caramel-${id}.diff"` },
           });
         }
-        case "GET providers":
-          return json(await options.keys.list(userId));
+        case "GET providers": {
+          const providers = await options.keys.list(userId);
+          return json(capabilities.mode === "local" ? providers : providers.filter(({ provider }) => provider !== "custom"));
+        }
         case "PUT providers/:id/key": {
-          if (!isProvider(id)) return fail(404, "not_found");
-          const input = (await body(request)) as { key?: unknown };
-          if (typeof input.key !== "string") throw new RunRequestError(["key: must be a string."]);
-          const tested = await testKey(id, input.key.trim());
-          const view = await options.keys.set(userId, id, input.key, tested.ok);
-          return json({ provider: view.provider, last4: view.last4, verified: view.verified, test: tested });
+          // A shared server must not fetch URLs its users choose: that reaches its private network.
+          if (!isProvider(id) || (id === "custom" && capabilities.mode !== "local")) return fail(404, "not_found");
+          const input = (await body(request)) as { key?: unknown; baseUrl?: unknown };
+          let secret: string;
+          if (id === "custom") {
+            if (typeof input.baseUrl !== "string") throw new RunRequestError(["baseUrl: must be a string."]);
+            if (input.key !== undefined && typeof input.key !== "string") throw new RunRequestError(["key: must be a string."]);
+            try {
+              secret = encodeCustomCredential({ baseUrl: input.baseUrl, ...(input.key === undefined ? {} : { apiKey: input.key }) });
+            } catch (error) {
+              throw new RunRequestError([`baseUrl: ${(error as Error).message}`]);
+            }
+          } else {
+            if (typeof input.key !== "string") throw new RunRequestError(["key: must be a string."]);
+            secret = input.key.trim();
+          }
+          const tested = await testKey(id, secret);
+          const view = await options.keys.set(userId, id, secret, tested.ok);
+          return json({ provider: view.provider, last4: view.last4, endpoint: view.endpoint, verified: view.verified, test: tested });
         }
         case "POST providers/:id/test": {
           if (!isProvider(id)) return fail(404, "not_found");
@@ -231,6 +249,12 @@ export function createApp(options: AppOptions): (request: Request) => Promise<Re
           const tested = await testKey(id, key);
           await options.keys.markVerified(userId, id, tested.ok);
           return json(tested);
+        }
+        case "POST providers/:id/connect": {
+          if (!isProvider(id)) return fail(404, "not_found");
+          const started = options.connectProvider?.(id) ?? null;
+          if (started === null) return fail(404, "connect_unavailable", { provider: id });
+          return json(await started);
         }
         case "DELETE providers/:id/key":
           if (!isProvider(id)) return fail(404, "not_found");

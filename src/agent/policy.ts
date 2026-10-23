@@ -1,5 +1,5 @@
 import type { CommandNetwork, SandboxChoice } from "../execution";
-import type { ModelAction, ModelAdapter, ModelError } from "../model";
+import type { ModelAction, ModelAdapter, ModelError, ModelUsage } from "../model";
 import type { AgentEvent, AgentStatus, CommandExecutor } from "./types";
 
 export interface AutonomousRunOptions {
@@ -28,6 +28,8 @@ export interface AutonomousRunOptions {
   apiKey?: string;
   /** Recorded in run_started when this run is a follow-up of an earlier run. */
   parentRunId?: string;
+  /** Model usage spent before the run started (plan mode), counted in the run's totals. */
+  priorUsage?: readonly ModelUsage[];
 }
 
 export interface AutonomousRunDependencies {

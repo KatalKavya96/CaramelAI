@@ -1,0 +1,33 @@
+diff --git a/src/dates.ts b/src/dates.ts
+index 9be30bc..f90a064 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -3,6 +3,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
+ 
+ /** "2025-03-03" -> "Mon 3 Mar". The input is a calendar date with no time of day. */
+ export function formatDueDate(isoDate: string): string {
++  // new Date("YYYY-MM-DD") is midnight UTC. Read it back in UTC too: local getters would show
++  // the previous day anywhere west of Greenwich.
+   const date = new Date(isoDate);
+-  return `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
++  return `${DAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+ }
+diff --git a/test/dates.test.ts b/test/dates.test.ts
+index fac39d1..56dab8e 100644
+--- a/test/dates.test.ts
++++ b/test/dates.test.ts
+@@ -7,6 +7,14 @@ test("formats a due date", () => {
+   expect(formatDueDate("2024-12-31")).toBe("Tue 31 Dec");
+ });
+ 
++test("a calendar date does not move with the machine's time zone", () => {
++  // Runs the check in a child process so TZ applies from the start.
++  const run = Bun.spawnSync(["bun", "-e", 'import { formatDueDate } from "./src/dates"; console.log(formatDueDate("2025-03-03"))'], {
++    env: { ...process.env, TZ: "America/Los_Angeles" },
++  });
++  expect(run.stdout.toString().trim()).toBe("Mon 3 Mar");
++});
++
+ test("writes the reminder line", () => {
+   expect(reminderLine({ title: "File VAT return", due: "2025-03-03" })).toBe('Reminder: "File VAT return" is due Mon 3 Mar');
+ });

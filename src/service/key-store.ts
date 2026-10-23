@@ -1,43 +1,51 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  DEEPSEEK_BASE_URL,
-  DEFAULT_DEEPSEEK_MODEL,
-  DEFAULT_OPENROUTER_MODEL,
-  DEFAULT_QWEN_MODEL,
-  QWEN_BASE_URL,
-} from "../model";
+import { decodeCustomCredential, NO_KEY, PROVIDER_INFO, PROVIDERS, type KeyTestResult, type Provider } from "../model/providers";
 
-export const PROVIDERS = ["openrouter", "deepseek", "qwen"] as const;
-export type Provider = (typeof PROVIDERS)[number];
+export { isProvider, PROVIDERS, type KeyTestResult, type Provider } from "../model/providers";
 
-export const DEFAULT_MODELS: Record<Provider, string> = {
-  openrouter: DEFAULT_OPENROUTER_MODEL,
-  deepseek: DEFAULT_DEEPSEEK_MODEL,
-  qwen: DEFAULT_QWEN_MODEL,
-};
-
-export function isProvider(value: string): value is Provider {
-  return (PROVIDERS as readonly string[]).includes(value);
-}
+export const DEFAULT_MODELS = Object.fromEntries(
+  PROVIDERS.map((provider) => [provider, PROVIDER_INFO[provider].defaultModel]),
+) as Record<Provider, string>;
 
 /** What a client may see about a stored key. Never the key itself. */
 export interface ProviderKeyView {
   provider: Provider;
+  label: string;
+  /** Where the user gets a key, for the link beside the key field. */
+  keyUrl: string;
+  /** False means runs show tokens only: this provider does not say what a call cost. */
+  reportsCost: boolean;
+  /** True when the provider can be connected by signing in instead of pasting a key. */
+  oauth: boolean;
   last4: string | null;
+  /** The base URL of a custom endpoint; null for the built-in providers. */
+  endpoint: string | null;
   verified: boolean;
   defaultModel: string;
   updatedAt: string | null;
 }
 
-export type KeyTestResult =
-  | { ok: true }
-  | { ok: false; error: "invalid_key" | "no_credit" | "rate_limited" | "provider_error"; message: string };
+function describe(provider: Provider) {
+  const info = PROVIDER_INFO[provider];
+  return { provider, label: info.label, keyUrl: info.keyUrl, reportsCost: info.reportsCost, oauth: info.oauth, defaultModel: info.defaultModel };
+}
+
+/** What may be shown about a secret: never the key, only its last four characters and, for a custom endpoint, its URL. */
+function secretDetails(provider: Provider, secret: string): { last4: string; endpoint?: string } {
+  if (provider === "custom") {
+    const endpoint = decodeCustomCredential(secret);
+    return { last4: endpoint.apiKey === NO_KEY ? "none" : endpoint.apiKey.slice(-4), endpoint: endpoint.baseUrl };
+  }
+  if (secret.length < 8 || secret.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+  return { last4: secret.slice(-4) };
+}
 
 interface StoredKey {
   iv: string;
   ciphertext: string;
   last4: string;
+  endpoint?: string;
   verified: boolean;
   updatedAt: string;
 }
@@ -61,6 +69,13 @@ export interface SecretBackend {
 }
 
 const KEYCHAIN_SERVICE = "dev.caramel.app";
+
+interface IndexEntry {
+  last4: string;
+  endpoint?: string;
+  verified: boolean;
+  updatedAt: string;
+}
 
 /**
  * Keys in the operating system's credential store (macOS Keychain, Windows Credential Manager,
@@ -86,19 +101,19 @@ export class KeychainKeyStore implements ProviderKeyStore {
   async list(userId: string): Promise<ProviderKeyView[]> {
     const index = (await this.readIndex())[userId] ?? {};
     return PROVIDERS.map((provider) => ({
-      provider,
+      ...describe(provider),
       last4: index[provider]?.last4 ?? null,
+      endpoint: index[provider]?.endpoint ?? null,
       verified: index[provider]?.verified ?? false,
-      defaultModel: DEFAULT_MODELS[provider],
       updatedAt: index[provider]?.updatedAt ?? null,
     }));
   }
 
   async set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView> {
     const trimmed = secret.trim();
-    if (trimmed.length < 8 || trimmed.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+    const details = secretDetails(provider, trimmed);
     await this.secrets.set({ service: KEYCHAIN_SERVICE, name: this.name(userId, provider), value: trimmed });
-    await this.updateIndex(userId, provider, { last4: trimmed.slice(-4), verified, updatedAt: this.now().toISOString() });
+    await this.updateIndex(userId, provider, { ...details, verified, updatedAt: this.now().toISOString() });
     return (await this.list(userId)).find((view) => view.provider === provider)!;
   }
 
@@ -120,7 +135,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
     return `${userId}:${provider}`;
   }
 
-  private async readIndex(): Promise<Record<string, Partial<Record<Provider, { last4: string; verified: boolean; updatedAt: string }>>>> {
+  private async readIndex(): Promise<Record<string, Partial<Record<Provider, IndexEntry>>>> {
     try {
       return JSON.parse(await readFile(this.indexPath, "utf8"));
     } catch {
@@ -131,7 +146,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
   private async updateIndex(
     userId: string,
     provider: Provider,
-    entry: { last4: string; verified: boolean; updatedAt: string } | undefined,
+    entry: IndexEntry | undefined,
   ): Promise<void> {
     const index = await this.readIndex();
     const user = index[userId] ?? {};
@@ -167,17 +182,17 @@ export class KeyStore implements ProviderKeyStore {
   async list(userId: string): Promise<ProviderKeyView[]> {
     const keys = await this.read(userId);
     return PROVIDERS.map((provider) => ({
-      provider,
+      ...describe(provider),
       last4: keys[provider]?.last4 ?? null,
+      endpoint: keys[provider]?.endpoint ?? null,
       verified: keys[provider]?.verified ?? false,
-      defaultModel: DEFAULT_MODELS[provider],
       updatedAt: keys[provider]?.updatedAt ?? null,
     }));
   }
 
   async set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView> {
     const trimmed = secret.trim();
-    if (trimmed.length < 8 || trimmed.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+    const details = secretDetails(provider, trimmed);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv, additionalData: this.aad(userId, provider) },
@@ -188,7 +203,7 @@ export class KeyStore implements ProviderKeyStore {
     keys[provider] = {
       iv: Buffer.from(iv).toString("base64"),
       ciphertext: Buffer.from(ciphertext).toString("base64"),
-      last4: trimmed.slice(-4),
+      ...details,
       verified,
       updatedAt: this.now().toISOString(),
     };
@@ -249,29 +264,5 @@ export class KeyStore implements ProviderKeyStore {
 
 /** One cheap authenticated request per provider, mapped to the errors the setup screen shows. */
 export async function testProviderKey(provider: Provider, key: string, fetcher: typeof fetch = fetch): Promise<KeyTestResult> {
-  const url = provider === "openrouter"
-    ? "https://openrouter.ai/api/v1/key"
-    : provider === "deepseek"
-      ? `${DEEPSEEK_BASE_URL}/user/balance`
-      : `${QWEN_BASE_URL}/models`;
-  let response: Response;
-  try {
-    response = await fetcher(url, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10_000) });
-  } catch (error) {
-    return { ok: false, error: "provider_error", message: error instanceof Error ? error.message : String(error) };
-  }
-  if (response.status === 401 || response.status === 403) return { ok: false, error: "invalid_key", message: "The provider rejected this key." };
-  if (response.status === 402) return { ok: false, error: "no_credit", message: "This key has no credit left." };
-  if (response.status === 429) return { ok: false, error: "rate_limited", message: "The provider is rate limiting this key; try again shortly." };
-  if (!response.ok) return { ok: false, error: "provider_error", message: `The provider answered ${response.status}.` };
-  if (provider === "deepseek") {
-    const body = (await response.json().catch(() => ({}))) as { is_available?: unknown };
-    if (body.is_available === false) return { ok: false, error: "no_credit", message: "This key has no credit left." };
-  }
-  if (provider === "openrouter") {
-    const body = (await response.json().catch(() => ({}))) as { data?: { limit_remaining?: unknown } };
-    const remaining = body.data?.limit_remaining;
-    if (typeof remaining === "number" && remaining <= 0) return { ok: false, error: "no_credit", message: "This key has no credit left." };
-  }
-  return { ok: true };
+  return await PROVIDER_INFO[provider].testKey(key, fetcher);
 }

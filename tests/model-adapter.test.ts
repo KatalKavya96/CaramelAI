@@ -42,6 +42,18 @@ describe("StructuredModelAdapter", () => {
     });
   });
 
+  test("an unparseable reply still reports the tokens it was billed for", async () => {
+    const adapter = new StructuredModelAdapter(new ScriptedTransport([
+      { output: "not json at all", usage: { inputTokens: 900, outputTokens: 40, totalTokens: 940, costUsd: 0.003 } },
+    ]));
+    const error = await adapter.complete(REQUEST).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ModelError);
+    expect((error as ModelError).kind).toBe("invalid_response");
+    expect((error as ModelError).usage).toEqual([
+      { source: "provider", inputTokens: 900, outputTokens: 40, totalTokens: 940, costUsd: 0.003 },
+    ]);
+  });
+
   test("retries transient failures with bounded backoff", async () => {
     const transport = new ScriptedTransport([
       new ModelTransportError("rate_limit", "slow down"),

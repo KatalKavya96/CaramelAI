@@ -4,8 +4,8 @@
   "fixtureSha256": "66bf756a264b48593775708e48ff9c3e989f406c027fc4b1a64af2697c04d30e", "evaluatorSha256": "8ad68e3ede71571898394d224c86454d56bf3b122d033292af5d2be74b7c54cf", "solutionSha256": "fb03427717e70d6c9629c1e31ceb2ff54636af89fa7c125e43bf03391b01d405",
   "setup": [],
   "checks": [
-    { "name": "hidden remainder case", "kind": "task", "command": "python \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
-    { "name": "public regression suite", "kind": "regression", "command": "python test_chunks.py", "timeoutMs": 30000 }
+    { "name": "hidden remainder case", "kind": "task", "command": "python3 \"$DINNER_EVALUATOR/test_edge.py\"", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "python3 test_chunks.py", "timeoutMs": 30000 }
   ],
   "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
 }

@@ -3,7 +3,7 @@ FROM oven/bun:1.3.14-debian AS bun-runtime
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git make python3 python3-pip ripgrep \
+    && apt-get install -y --no-install-recommends ca-certificates git make python3 python3-pip ripgrep tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun

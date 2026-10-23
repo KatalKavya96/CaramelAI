@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-23T00:00:00.000Z",
+  "harnessRevision": "36ac12f",
+  "taskSetSha256": "e1c7d2a9067dd710698035e6bb691385557cfa20f20324a93885f00063208787",
+  "taskSet": {
+    "total": 15,
+    "development": 10,
+    "heldOut": 5
+  },
+  "fixtureCalibration": {
+    "attemptedEvaluations": 30,
+    "expectedOutcomesObserved": 30,
+    "mismatches": 0,
+    "method": "For every task, an empty patch must be unsolved and the pinned solution patch must be solved using the host-injected deterministic evaluator (TZ=UTC).",
+    "tasks": [
+      {
+        "id": "py-chunks",
+        "split": "held_out",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-env-override",
+        "split": "held_out",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-median",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-not-a-bug",
+        "split": "held_out",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-port",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-regression-test",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "py-slug",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-add",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-clamp",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-prefix",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-readme-example",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-receipt-rounding",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-rename-export",
+        "split": "development",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-timezone-date",
+        "split": "held_out",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      },
+      {
+        "id": "ts-unique",
+        "split": "held_out",
+        "emptyPatch": "unsolved",
+        "knownGoodPatch": "solved"
+      }
+    ]
+  }
+}

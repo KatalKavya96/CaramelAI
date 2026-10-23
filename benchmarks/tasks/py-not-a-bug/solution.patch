@@ -1,0 +1,40 @@
+diff --git a/listclean/__main__.py b/listclean/__main__.py
+index 9813573..81fca55 100644
+--- a/listclean/__main__.py
++++ b/listclean/__main__.py
+@@ -17,7 +17,7 @@ def main(argv: list[str]) -> int:
+     kept = dedupe(lines, fold_case=args.fold_case)
+     for address in kept:
+         print(address)
+-    print(f"kept {len(kept)} of {len([line for line in lines if line])} addresses", file=sys.stderr)
++    print(f"kept {len(kept)} of {len([line for line in lines if line.strip()])} addresses", file=sys.stderr)
+     return 0
+ 
+ 
+diff --git a/listclean/dedupe.py b/listclean/dedupe.py
+index 571c5aa..ea451d1 100644
+--- a/listclean/dedupe.py
++++ b/listclean/dedupe.py
+@@ -18,6 +18,8 @@ def dedupe(addresses: Iterable[str], fold_case: bool = False) -> list[str]:
+     seen: set[str] = set()
+     kept: list[str] = []
+     for address in addresses:
++        # Exports often pad addresses with spaces; " a@x.com" and "a@x.com" are one subscriber.
++        address = address.strip()
+         if address == "":
+             continue
+         key = subscriber_key(address, fold_case)
+diff --git a/tests/test_dedupe.py b/tests/test_dedupe.py
+index 8b9beb4..1cefd98 100644
+--- a/tests/test_dedupe.py
++++ b/tests/test_dedupe.py
+@@ -7,6 +7,9 @@ class DedupeTest(unittest.TestCase):
+     def test_exact_duplicates(self):
+         self.assertEqual(dedupe(["a@x.com", "b@x.com", "a@x.com"]), ["a@x.com", "b@x.com"])
+ 
++    def test_surrounding_whitespace_is_ignored(self):
++        self.assertEqual(dedupe(["jordan@fastmail.com", "jordan@fastmail.com ", "  "]), ["jordan@fastmail.com"])
++
+     def test_domain_case_is_ignored(self):
+         self.assertEqual(dedupe(["bob@Example.COM", "bob@example.com"]), ["bob@Example.COM"])
+ 

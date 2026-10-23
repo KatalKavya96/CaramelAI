@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ModelAdapter, ModelRequest, ResponseFormat } from "../model";
+import { ModelError, type ModelAdapter, type ModelRequest, type ModelUsage, type ResponseFormat } from "../model";
 import { PLAN_SYSTEM_PROMPT } from "../prompts";
 import { buildRepositoryMap, RepositoryTools } from "../tools";
 import { parsePlanResponse, PlanResponseSchema } from "./plan-parser";
@@ -27,6 +27,8 @@ export interface GeneratedPlan {
   questions: PlanQuestion[];
   /** Set when no plan could be produced, so the caller can say why instead of failing silently. */
   skippedReason?: string;
+  /** What planning cost; the caller adds it to the run so plan mode is not free in the totals. */
+  usage: ModelUsage[];
 }
 
 const PLAN_RESPONSE_FORMAT: ResponseFormat = {
@@ -48,10 +50,11 @@ export async function generatePlan(options: {
   repositoryContext: unknown;
   remainingTimeMs?: number;
 }): Promise<GeneratedPlan> {
-  const skipped = (reason: string): GeneratedPlan => ({
+  const skipped = (reason: string, usage: ModelUsage[] = []): GeneratedPlan => ({
     summary: "Plan generation was skipped. Proceeding with direct execution.",
     questions: [],
     skippedReason: reason,
+    usage,
   });
   if (options.model.completeText === undefined) return skipped("The model does not support plan mode.");
 
@@ -62,11 +65,14 @@ export async function generatePlan(options: {
     ],
     responseFormat: PLAN_RESPONSE_FORMAT,
   };
+  let usage: ModelUsage[] = [];
   try {
     const turn = await options.model.completeText(request, { remainingTimeMs: options.remainingTimeMs ?? 60_000 });
-    return parsePlanResponse(turn.output);
+    usage = [...(turn.wastedUsage ?? []), turn.usage];
+    return { ...parsePlanResponse(turn.output), usage };
   } catch (error) {
-    return skipped(error instanceof Error ? error.message : String(error));
+    if (error instanceof ModelError) usage = error.usage;
+    return skipped(error instanceof Error ? error.message : String(error), usage);
   }
 }
 

@@ -1,0 +1,29 @@
+diff --git a/beacon/config.py b/beacon/config.py
+index 2f10727..7813356 100644
+--- a/beacon/config.py
++++ b/beacon/config.py
+@@ -60,7 +60,8 @@ def load_config(path: str | None = None, environ: Mapping[str, str] | None = Non
+     for key in DEFAULTS:
+         name = f"BEACON_{key.upper()}"
+         if name in environ:
+-            config[key] = environ[name]
++            # Environment values are text, like INI values; give them the setting's type too.
++            config[key] = coerce(key, environ[name])
+ 
+     validate(config)
+     return config
+diff --git a/tests/test_config.py b/tests/test_config.py
+index 1aede5a..c5dc966 100644
+--- a/tests/test_config.py
++++ b/tests/test_config.py
+@@ -32,6 +32,10 @@ class LoadConfigTest(unittest.TestCase):
+         finally:
+             os.unlink(path)
+ 
++    def test_env_values_are_typed(self):
++        config = load_config(environ={"BEACON_PORT": "9000", "BEACON_DEBUG": "false"})
++        self.assertEqual((config["port"], config["debug"]), (9000, False))
++
+     def test_env_overrides_text_setting(self):
+         self.assertEqual(load_config(environ={"BEACON_HOST": "0.0.0.0"})["host"], "0.0.0.0")
+ 
