@@ -34,7 +34,7 @@ class MemorySecrets implements SecretBackend {
 
 const turn = (action: ModelTurn["decision"]["action"]): ModelTurn => ({ decision: { action }, usage: { source: "unavailable" } });
 
-async function launch() {
+async function launch(fetcher?: typeof fetch) {
   const dataDir = await temporaryDirectory("caramel-local-");
   const secrets = new MemorySecrets();
   const server = await startLocalServer({
@@ -42,6 +42,7 @@ async function launch() {
     secrets,
     webDist: join(dataDir, "no-web"),
     testKey: async () => ({ ok: false, error: "invalid_key", message: "offline test" }),
+    ...(fetcher === undefined ? {} : { fetcher }),
     runService: {
       createCommandExecutor: async () => ({ run: async () => { throw new Error("no commands"); } }),
       createModel: () => new FakeModelAdapter([turn({ type: "list_files" }), ...[1, 2, 3].map(() => turn({ type: "finish", summary: "done" }))]),
@@ -132,5 +133,46 @@ describe("local desktop server", () => {
       body: JSON.stringify({ task: "look", provider: "openrouter", repo: { kind: "local", path: "repo" } }),
     });
     expect(response.status).toBe(400);
+  });
+
+  test("Connect OpenRouter: PKCE sign-in saves the key OpenRouter returns, once", async () => {
+    const exchanges: Record<string, string>[] = [];
+    const fetcher = (async (_url: string, init: RequestInit) => {
+      exchanges.push(JSON.parse(String(init.body)));
+      return Response.json({ key: "sk-or-v1-from-oauth" });
+    }) as unknown as typeof fetch;
+    const { server, secrets, call } = await launch(fetcher);
+    const auth = { authorization: `Bearer ${server.token}` };
+    const port = new URL(server.origin).port;
+
+    // Only OpenRouter offers sign-in; the others need a pasted key.
+    expect((await call("/api/providers/anthropic/connect", { method: "POST", headers: auth })).status).toBe(404);
+    const started = await call("/api/providers/openrouter/connect", { method: "POST", headers: auth });
+    const url = new URL(((await started.json()) as { url: string }).url);
+    expect(url.origin + url.pathname).toBe("https://openrouter.ai/auth");
+    expect(url.searchParams.get("callback_url")).toBe(`http://localhost:${port}/connect/openrouter/callback`);
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    const state = url.searchParams.get("state")!;
+
+    // The callback arrives in the system browser: no cookie, Host is localhost.
+    const callback = (query: string) =>
+      call(`/connect/openrouter/callback?${query}`, { headers: { host: `localhost:${port}` } });
+    expect((await callback(`state=forged&code=abc`)).status).toBe(400);
+    const done = await callback(`state=${state}&code=abc`);
+    expect(done.status).toBe(200);
+    expect(await done.text()).toContain("OpenRouter is connected");
+
+    // The verifier we sent hashes to the challenge OpenRouter saw.
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0]).toMatchObject({ code: "abc", code_challenge_method: "S256" });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(exchanges[0]!.code_verifier));
+    expect(Buffer.from(digest).toString("base64url")).toBe(url.searchParams.get("code_challenge")!);
+    expect([...secrets.values.values()]).toContain("sk-or-v1-from-oauth");
+
+    // Replaying the same callback does nothing.
+    expect((await callback(`state=${state}&code=abc`)).status).toBe(400);
+    expect(exchanges).toHaveLength(1);
+    // Any other path on localhost is still refused by the Host check.
+    expect((await call("/api/me", { headers: { host: `localhost:${port}`, ...auth } })).status).toBe(421);
   });
 });

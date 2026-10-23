@@ -1,9 +1,10 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { detectNativeSandbox } from "../execution";
-import { KeychainKeyStore, LOCAL_APP_POLICY, RunService, type SecretBackend } from "../service";
+import { KeychainKeyStore, LOCAL_APP_POLICY, RunService, testProviderKey, type SecretBackend } from "../service";
 import { createApp, type AppOptions, type Capabilities } from "./app";
 import { LocalAuth } from "./local-auth";
+import { OPENROUTER_CALLBACK_PATH, OpenRouterConnect } from "./openrouter-connect";
 import { createProviderModel } from "./providers";
 
 export interface LocalServerOptions {
@@ -16,6 +17,8 @@ export interface LocalServerOptions {
   token?: string;
   runService?: Partial<Parameters<typeof RunService.open>[0]>;
   testKey?: AppOptions["testKey"];
+  /** Replaces fetch for the OpenRouter sign-in exchange (tests). */
+  fetcher?: typeof fetch;
 }
 
 export interface LocalServer {
@@ -59,13 +62,32 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   };
 
   let app: ((request: Request) => Promise<Response>) | undefined;
+  let connect: OpenRouterConnect | undefined;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: options.port ?? 0,
     idleTimeout: 0,
-    fetch: (request) => app!(request),
+    fetch: (request) => {
+      // OpenRouter only redirects to "localhost", which the Host check below would refuse. The
+      // callback needs no cookie (its one-time state proves the flow), so it is let through here.
+      const url = new URL(request.url);
+      const host = request.headers.get("host");
+      if (url.pathname === OPENROUTER_CALLBACK_PATH && request.method === "GET" &&
+          (host === `localhost:${server.port}` || host === `127.0.0.1:${server.port}`)) {
+        return connect!.callback(request);
+      }
+      return app!(request);
+    },
   });
   const origin = `http://127.0.0.1:${server.port}`;
+  const testKey = options.testKey ?? ((provider, key) => testProviderKey(provider, key));
+  connect = new OpenRouterConnect({
+    callbackOrigin: `http://localhost:${server.port}`,
+    keys,
+    userId: "local",
+    testKey: (key) => testKey("openrouter", key),
+    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+  });
   app = createApp({
     service,
     keys,
@@ -77,7 +99,8 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
     allowedHosts: [`127.0.0.1:${server.port}`],
     staticDir: resolve(options.webDist ?? resolve(import.meta.dir, "../../web/dist")),
     extraRoutes: (request) => auth.exchange(request),
-    ...(options.testKey === undefined ? {} : { testKey: options.testKey }),
+    testKey,
+    connectProvider: (provider) => (provider === "openrouter" ? connect!.start() : null),
   });
   return {
     launchUrl: `${origin}/?token=${auth.token}`,
