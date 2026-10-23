@@ -1,8 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BudgetMeters, OutcomeCard, ProviderKeyForm, StepTimeline } from "../src/domain";
+import { BudgetMeters, OutcomeCard, ProviderKeyForm, ScorecardView, StepTimeline } from "../src/domain";
 import { INITIAL_LIVE_RUN, reduceLiveRun } from "../src/data/live-run";
 import { VERIFIED_RUN } from "./fixtures/events";
+import { SCORECARD } from "./fixtures/scorecard";
 
 describe("StepTimeline", () => {
   it("renders recorded steps with outcomes and command output on demand", async () => {
@@ -79,5 +80,17 @@ describe("ProviderKeyForm", () => {
     await userEvent.type(screen.getByLabelText("Model"), "qwen2.5-coder");
     await userEvent.click(save);
     expect(onSave).toHaveBeenCalledWith("", { baseUrl: "http://localhost:11434/v1", model: "qwen2.5-coder" });
+  });
+});
+
+describe("ScorecardView", () => {
+  it("compares models and flags the overconfident run", () => {
+    render(<ScorecardView scorecard={SCORECARD} />);
+    const [models] = screen.getAllByRole("table");
+    const free = within(models!).getByRole("row", { name: /qwen3-coder:free/ });
+    expect(within(free).getByText("100% (2/2)")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(/1 run was not started/);
+    expect(screen.getByText("Said verified, but the hidden check failed")).toBeInTheDocument();
+    expect(screen.getByText("runs/x-ai_grok-4/py-not-a-bug/1")).toBeInTheDocument();
   });
 });

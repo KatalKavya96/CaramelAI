@@ -12,3 +12,4 @@ export * from "./ProviderKeyForm";
 export * from "./run-options";
 export * from "./RunComposer";
 export * from "./ApplyNotice";
+export * from "./ScorecardView";

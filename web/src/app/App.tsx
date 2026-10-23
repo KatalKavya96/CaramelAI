@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useApi, useSession } from "../data";
 import { ErrorBanner, Skeleton } from "../patterns";
+import { BenchmarksScreen } from "../screens/BenchmarksScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { ReposScreen } from "../screens/ReposScreen";
 import { RunScreen } from "../screens/RunScreen";
@@ -26,6 +27,7 @@ export function App() {
         <Route index element={<HomeScreen />} />
         <Route path="setup" element={<SetupScreen />} />
         <Route path="repos" element={<ReposScreen />} />
+        <Route path="benchmarks" element={<BenchmarksScreen />} />
         <Route path="runs/:id" element={<RunScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

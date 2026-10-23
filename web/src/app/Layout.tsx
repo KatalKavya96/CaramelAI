@@ -6,7 +6,7 @@ import type { RunView } from "../lib/contract";
 import { taskTitle } from "../lib/format";
 import { isActive } from "../lib/status";
 import { AppShell, ConfirmDialog, Sidebar, SidebarRail, type SidebarLink } from "../patterns";
-import { FolderIcon, KeyIcon, SearchIcon, SignOutIcon, GearIcon } from "../ui";
+import { BoltIcon, FolderIcon, KeyIcon, SearchIcon, SignOutIcon, GearIcon } from "../ui";
 import { SearchPalette } from "../screens/SearchPalette";
 import { SettingsDialog } from "../screens/SettingsDialog";
 import { useUiState } from "./ui-state";
@@ -75,6 +75,8 @@ export function Layout({ login }: { login: string }) {
   const links: SidebarLink[] = [
     { label: "Search", icon: <SearchIcon size={22} />, href: "#search", onSelect: () => ui.setSearchOpen(true) },
     { label: "Repositories", icon: <FolderIcon size={22} />, href: "/repos", active: location.pathname === "/repos", onSelect: go("/repos") },
+    // Benchmarks are run from the command line on your own computer, so only the desktop app lists them.
+    ...(capabilities.mode === "local" ? [{ label: "Benchmarks", icon: <BoltIcon size={22} />, href: "/benchmarks", active: location.pathname === "/benchmarks", onSelect: go("/benchmarks") }] : []),
   ];
 
   const latestStatus = (root: RunView): RunView => {
