@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "py-regression-test",
+  "title": "Add a regression test for an already fixed bug",
+  "language": "python",
+  "split": "development",
+  "issue": "Add a regression test for #212\n\n#212 (amounts with a thousands separator like \"1,234.50\" crashed the import with `decimal.InvalidOperation`) was fixed in 0.4.1, see CHANGELOG.md. The fix went in without a test, and last week someone almost reverted it while tidying `parse_amount`.\n\nPlease add a test that would have caught #212, so CI goes red if it ever comes back. The parser itself is fine now, so please don't change `ledger/amounts.py`; this PR should only add tests.\n\nTests run with `python3 -m unittest discover -s tests -t .`.",
+  "fixtureSha256": "2468641961cd7906f52aa62ca70ce0b0f514ae9a7797ac95ac0eb18ab9dc5dc1",
+  "evaluatorSha256": "861f16ad1e49d79448b706fdc76b8eaf2ac7a80b8777517309cd1c2142867955",
+  "solutionSha256": "db572cece8d48aa045a27700dd4354f7a0cd07667af2092fa23bbd3df81c48f8",
+  "setup": [],
+  "checks": [
+    {
+      "name": "test fails when the fix is reverted",
+      "kind": "task",
+      "command": "python3 \"$DINNER_EVALUATOR/check_regression_test.py\"",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "python3 -m unittest discover -s tests -t .",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 12,
+    "maxMinutes": 6,
+    "maxModelCalls": 12
+  }
+}

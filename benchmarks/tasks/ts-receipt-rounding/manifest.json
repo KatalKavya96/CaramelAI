@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-receipt-rounding",
+  "title": "Receipt total is one cent short",
+  "language": "typescript",
+  "split": "development",
+  "issue": "Receipt total is one cent short for some carts\n\nWe print receipts with tillroll at our café. For this cart the subtotal is a cent lower than the till:\n\n```json\n[\n  { \"sku\": \"LAT\", \"name\": \"Oat latte\", \"price\": 4.35, \"qty\": 1 },\n  { \"sku\": \"MUF\", \"name\": \"Blueberry muffin\", \"price\": 2.95, \"qty\": 2 }\n]\n```\n\n```\n$ bun run src/cli.ts cart.json\n1 x Oat latte  $4.34\n2 x Blueberry muffin  $5.90\nSubtotal: $10.24\nTax: $0.82\nTotal: $11.06\n```\n\n4.35 + 2 × 2.95 is 10.25. It only happens with some prices; carts with $2.50 or $3.00 items are always right. The tests pass, so I'm not sure where to look.",
+  "fixtureSha256": "c71317616ca9270369b2708a3bc2e7bf2ed245c6472b384b239c90f3b9da041a",
+  "evaluatorSha256": "b31aaaac7b25d2377d48339e770f50c15fbc2c98397d197042729b5e5c6234ee",
+  "solutionSha256": "65522e99177eeb26d8aab5f6134602272ed553e906eff7f895da9b089d390269",
+  "setup": [],
+  "checks": [
+    {
+      "name": "receipts printed from the CLI",
+      "kind": "task",
+      "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts",
+      "timeoutMs": 60000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "bun run test",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 14,
+    "maxMinutes": 8,
+    "maxModelCalls": 14
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-timezone-date",
+  "title": "Test fails only outside UTC",
+  "language": "typescript",
+  "split": "held_out",
+  "issue": "dates.test.ts fails on my machine but passes in CI\n\nFresh clone, no changes, `bun test` fails for me:\n\n```\ntest/dates.test.ts:\nerror: expect(received).toBe(expected)\n\nExpected: \"Mon 3 Mar\"\nReceived: \"Sun 2 Mar\"\n\n(fail) formats a due date\n(fail) writes the reminder line\n```\n\nCI on main is green, and my teammate in London says it passes for her too. I'm in San Francisco if that matters. Looks like a flaky test to me. Could we pin `TZ=UTC` in the test script so it behaves the same everywhere?",
+  "fixtureSha256": "42b04fd939beeaa1d3c9db381fe393ec49403d881d1b0c4177ccccaaf99a886a",
+  "evaluatorSha256": "b7ea6d3282b34a611ded0bba6969f99c7ef5a20c0bf3c10ef69752b8f065b3a9",
+  "solutionSha256": "f1b057a7f230d76af5775cdeeb2899c10b92c4d65d788fc4242bf08d394376fa",
+  "setup": [],
+  "checks": [
+    {
+      "name": "reminders in six time zones",
+      "kind": "task",
+      "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts",
+      "timeoutMs": 90000
+    },
+    {
+      "name": "public test suite",
+      "kind": "regression",
+      "command": "bun run test",
+      "timeoutMs": 30000
+    }
+  ],
+  "budget": {
+    "maxSteps": 12,
+    "maxMinutes": 6,
+    "maxModelCalls": 12
+  }
+}
