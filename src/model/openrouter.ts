@@ -28,9 +28,44 @@ function statusCode(error: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+const DETAIL_LIMIT = 400;
+
+/**
+ * OpenRouter's own message is often just "Provider returned error"; what went wrong is in
+ * error.metadata: which upstream provider answered, and its raw reply (an unsupported
+ * response_format, a data-policy block, an outage). Without it a failed run says nothing useful.
+ */
+export function describeOpenRouterError(payload: unknown, fallback: string): string {
+  let body = payload;
+  if (typeof payload === "string") {
+    try {
+      body = JSON.parse(payload);
+    } catch {
+      return payload.trim() === "" ? fallback : `${fallback}: ${payload.trim().slice(0, DETAIL_LIMIT)}`;
+    }
+  }
+  const error = (body as { error?: unknown } | null)?.error ?? body;
+  if (typeof error !== "object" || error === null) return fallback;
+  const { message, code, metadata } = error as { message?: unknown; code?: unknown; metadata?: { raw?: unknown; provider_name?: unknown } | null };
+  const parts = [typeof message === "string" && message !== "" ? message : fallback];
+  const context = [
+    typeof code === "number" || typeof code === "string" ? `code ${code}` : null,
+    typeof metadata?.provider_name === "string" ? `provider ${metadata.provider_name}` : null,
+  ].filter((part) => part !== null);
+  if (context.length > 0) parts.push(`(${context.join(", ")})`);
+  const raw = metadata?.raw;
+  if (raw !== undefined && raw !== null && raw !== "") {
+    const text = typeof raw === "string" ? raw : JSON.stringify(raw);
+    parts.push(`: ${text.length > DETAIL_LIMIT ? `${text.slice(0, DETAIL_LIMIT)}…` : text}`);
+  }
+  return parts.join(" ").replace(" :", ":");
+}
+
 function transportError(error: unknown): ModelTransportError {
   const status = statusCode(error);
-  const message = error instanceof Error ? error.message : "OpenRouter request failed.";
+  const base = error instanceof Error ? error.message : "OpenRouter request failed.";
+  const body = typeof error === "object" && error !== null ? (error as { body?: unknown }).body : undefined;
+  const message = body === undefined ? base : describeOpenRouterError(body, base);
   if (status === 401 || status === 403) return new ModelTransportError("authentication", message, { cause: error });
   if (status === 429) return new ModelTransportError("rate_limit", message, { cause: error, retryAfterMs: retryAfterMs(error) });
   if (status !== undefined && status >= 400 && status < 500) return new ModelTransportError("permanent", message, { cause: error });
@@ -68,7 +103,7 @@ export class OpenRouterTransport implements ModelTransport {
         throw new ModelTransportError("permanent", "OpenRouter returned an invalid chat response.");
       }
       const result = response as {
-        choices: Array<{ message?: { content?: unknown } }>;
+        choices: Array<{ message?: { content?: unknown }; error?: unknown }>;
         usage?: {
           promptTokens: number;
           completionTokens: number;
@@ -85,6 +120,11 @@ export class OpenRouterTransport implements ModelTransport {
         cachedInputTokens: result.usage.promptTokensDetails?.cachedTokens,
         costUsd: result.usage.cost,
       };
+      // A provider can fail after OpenRouter accepted the request: the error then rides in the choice.
+      const choiceError = result.choices[0]?.error;
+      if (choiceError !== undefined && choiceError !== null) {
+        throw new ModelTransportError("transient", describeOpenRouterError({ error: choiceError }, "Provider returned error"));
+      }
       return { output: textContent(result.choices[0]?.message?.content), usage };
     } catch (error) {
       if (error instanceof ModelTransportError) throw error;
