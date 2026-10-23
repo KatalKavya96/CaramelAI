@@ -67,6 +67,11 @@ export interface RunRequestPolicy {
   allowRunNetwork: boolean;
   /** Where commands run. A shared server uses Docker: OS sandboxes share one kernel and user between tenants. */
   sandbox: "auto" | "native" | "docker";
+  /**
+   * Whether the "custom" provider may be used. Off on a shared server: a user-chosen URL would make
+   * the server send requests into its own network (server-side request forgery).
+   */
+  allowCustomEndpoint: boolean;
 }
 
 export const SHARED_SERVER_POLICY: RunRequestPolicy = {
@@ -76,6 +81,7 @@ export const SHARED_SERVER_POLICY: RunRequestPolicy = {
   commandNetwork: "none",
   allowRunNetwork: false,
   sandbox: "docker",
+  allowCustomEndpoint: false,
 };
 
 /**
@@ -89,6 +95,7 @@ export const LOCAL_APP_POLICY: RunRequestPolicy = {
   commandNetwork: "none",
   allowRunNetwork: true,
   sandbox: "auto",
+  allowCustomEndpoint: true,
 };
 
 export class RunRequestError extends Error {
@@ -114,6 +121,12 @@ export function parseRunRequest(input: unknown, policy: RunRequestPolicy): RunRe
   };
   if (request.network === "full" && !policy.allowRunNetwork && policy.commandNetwork !== "bridge") {
     issues.push("network: this server runs commands without network access.");
+  }
+  if (request.provider === "custom" && !policy.allowCustomEndpoint) {
+    issues.push("provider: custom endpoints are available only in the desktop app.");
+  }
+  if (request.provider === "custom" && request.model === undefined) {
+    issues.push("model: a custom endpoint needs a model name, such as llama3.1.");
   }
   if (request.repo.kind === "local" && !policy.allowLocalRepos) {
     issues.push("repo: this server accepts only git URLs, not local paths.");

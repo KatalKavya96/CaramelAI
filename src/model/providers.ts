@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createAnthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 import { createDeepSeekModel, DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_MODEL } from "./deepseek";
 import {
+  createCustomModel,
   createOpenAIModel,
   createXaiModel,
   DEFAULT_OPENAI_MODEL,
@@ -13,7 +14,7 @@ import { createOpenRouterModel, DEFAULT_OPENROUTER_MODEL } from "./openrouter";
 import { createQwenModel, DEFAULT_QWEN_MODEL, QWEN_BASE_URL } from "./qwen";
 import type { ModelAdapter } from "./types";
 
-export const PROVIDERS = ["openrouter", "anthropic", "openai", "xai", "deepseek", "qwen"] as const;
+export const PROVIDERS = ["openrouter", "anthropic", "openai", "xai", "deepseek", "qwen", "custom"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 export type KeyTestResult =
@@ -25,6 +26,7 @@ export interface ProviderInfo {
   id: Provider;
   /** What the user sees in the provider picker. */
   label: string;
+  /** Empty for "custom": there is no sensible default, so runs must name a model. */
   defaultModel: string;
   /** Environment variable the CLI reads the key from. */
   keyEnv: string;
@@ -63,6 +65,64 @@ async function testWithGet(
 }
 
 const bearer = (key: string) => ({ authorization: `Bearer ${key}` });
+
+/** A custom endpoint is a base URL plus a key, stored together as one encrypted secret. */
+export interface CustomEndpoint {
+  baseUrl: string;
+  apiKey: string;
+}
+
+/** Local runtimes such as Ollama ignore the key, but the OpenAI client needs a non-empty one. */
+export const NO_KEY = "not-needed";
+
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * https anywhere, or plain http only to this machine: over http the key travels in clear text,
+ * which is harmless for a local Ollama and a leak for anything on a network.
+ */
+export function normalizeCustomBaseUrl(input: string): string {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    throw new Error("Base URL must be a full URL, such as http://localhost:11434/v1.");
+  }
+  if (url.username !== "" || url.password !== "") throw new Error("Put the key in the key field, not in the URL.");
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK.has(url.hostname))) {
+    throw new Error("Base URL must use https, or http only for localhost.");
+  }
+  if (url.search !== "" || url.hash !== "") throw new Error("Base URL must not have a query string.");
+  return url.toString().replace(/\/+$/, "");
+}
+
+export function encodeCustomCredential(endpoint: { baseUrl: string; apiKey?: string }): string {
+  const apiKey = endpoint.apiKey?.trim() || NO_KEY;
+  return JSON.stringify({ baseUrl: normalizeCustomBaseUrl(endpoint.baseUrl), apiKey });
+}
+
+export function decodeCustomCredential(secret: string): CustomEndpoint {
+  try {
+    const value = JSON.parse(secret) as Partial<CustomEndpoint>;
+    if (typeof value.baseUrl === "string" && typeof value.apiKey === "string") {
+      return { baseUrl: normalizeCustomBaseUrl(value.baseUrl), apiKey: value.apiKey };
+    }
+  } catch {
+    // Falls through to the error below.
+  }
+  throw new Error("The custom endpoint is not set up: save a base URL first.");
+}
+
+/**
+ * The credential the CLI and benchmark read from the environment. For "custom" it is built from
+ * CUSTOM_BASE_URL and an optional CUSTOM_API_KEY; for the rest it is the key variable.
+ */
+export function credentialFromEnv(provider: Provider, env: Record<string, string | undefined>): string | undefined {
+  if (provider !== "custom") return env[PROVIDER_INFO[provider].keyEnv]?.trim() || undefined;
+  const baseUrl = env.CUSTOM_BASE_URL?.trim();
+  if (baseUrl === undefined || baseUrl === "") return undefined;
+  return encodeCustomCredential({ baseUrl, ...(env.CUSTOM_API_KEY === undefined ? {} : { apiKey: env.CUSTOM_API_KEY }) });
+}
 
 export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
   openrouter: {
@@ -146,6 +206,36 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     oauth: false,
     create: (options) => createQwenModel(options),
     testKey: (key, fetcher) => testWithGet(`${QWEN_BASE_URL}/models`, bearer(key), fetcher),
+  },
+  custom: {
+    id: "custom",
+    label: "Custom endpoint (Ollama, LM Studio, Groq, Together or any OpenAI-compatible API)",
+    defaultModel: "",
+    keyEnv: "CUSTOM_API_KEY",
+    keyUrl: "https://platform.openai.com/docs/api-reference/chat",
+    reportsCost: false,
+    oauth: false,
+    create: (options) => {
+      if (options.model === undefined || options.model.trim() === "") {
+        throw new Error("A custom endpoint needs a model name, such as llama3.1 or qwen2.5-coder.");
+      }
+      const endpoint = decodeCustomCredential(options.apiKey);
+      return createCustomModel({ ...endpoint, model: options.model.trim() });
+    },
+    // Listing models is free on every OpenAI-compatible server and proves the URL and key work.
+    testKey: async (key, fetcher) => {
+      let endpoint: CustomEndpoint;
+      try {
+        endpoint = decodeCustomCredential(key);
+      } catch (error) {
+        return failure("provider_error", (error as Error).message);
+      }
+      const result = await testWithGet(`${endpoint.baseUrl}/models`, bearer(endpoint.apiKey), fetcher);
+      if (!result.ok && result.message.includes("answered 404")) {
+        return failure("provider_error", "Nothing answered at /models. The base URL usually ends in /v1.");
+      }
+      return result;
+    },
   },
 };
 

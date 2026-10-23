@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { PROVIDER_INFO, PROVIDERS, type KeyTestResult, type Provider } from "../model/providers";
+import { decodeCustomCredential, NO_KEY, PROVIDER_INFO, PROVIDERS, type KeyTestResult, type Provider } from "../model/providers";
 
 export { isProvider, PROVIDERS, type KeyTestResult, type Provider } from "../model/providers";
 
@@ -19,6 +19,8 @@ export interface ProviderKeyView {
   /** True when the provider can be connected by signing in instead of pasting a key. */
   oauth: boolean;
   last4: string | null;
+  /** The base URL of a custom endpoint; null for the built-in providers. */
+  endpoint: string | null;
   verified: boolean;
   defaultModel: string;
   updatedAt: string | null;
@@ -29,10 +31,21 @@ function describe(provider: Provider) {
   return { provider, label: info.label, keyUrl: info.keyUrl, reportsCost: info.reportsCost, oauth: info.oauth, defaultModel: info.defaultModel };
 }
 
+/** What may be shown about a secret: never the key, only its last four characters and, for a custom endpoint, its URL. */
+function secretDetails(provider: Provider, secret: string): { last4: string; endpoint?: string } {
+  if (provider === "custom") {
+    const endpoint = decodeCustomCredential(secret);
+    return { last4: endpoint.apiKey === NO_KEY ? "none" : endpoint.apiKey.slice(-4), endpoint: endpoint.baseUrl };
+  }
+  if (secret.length < 8 || secret.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+  return { last4: secret.slice(-4) };
+}
+
 interface StoredKey {
   iv: string;
   ciphertext: string;
   last4: string;
+  endpoint?: string;
   verified: boolean;
   updatedAt: string;
 }
@@ -56,6 +69,13 @@ export interface SecretBackend {
 }
 
 const KEYCHAIN_SERVICE = "dev.caramel.app";
+
+interface IndexEntry {
+  last4: string;
+  endpoint?: string;
+  verified: boolean;
+  updatedAt: string;
+}
 
 /**
  * Keys in the operating system's credential store (macOS Keychain, Windows Credential Manager,
@@ -83,6 +103,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
     return PROVIDERS.map((provider) => ({
       ...describe(provider),
       last4: index[provider]?.last4 ?? null,
+      endpoint: index[provider]?.endpoint ?? null,
       verified: index[provider]?.verified ?? false,
       updatedAt: index[provider]?.updatedAt ?? null,
     }));
@@ -90,9 +111,9 @@ export class KeychainKeyStore implements ProviderKeyStore {
 
   async set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView> {
     const trimmed = secret.trim();
-    if (trimmed.length < 8 || trimmed.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+    const details = secretDetails(provider, trimmed);
     await this.secrets.set({ service: KEYCHAIN_SERVICE, name: this.name(userId, provider), value: trimmed });
-    await this.updateIndex(userId, provider, { last4: trimmed.slice(-4), verified, updatedAt: this.now().toISOString() });
+    await this.updateIndex(userId, provider, { ...details, verified, updatedAt: this.now().toISOString() });
     return (await this.list(userId)).find((view) => view.provider === provider)!;
   }
 
@@ -114,7 +135,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
     return `${userId}:${provider}`;
   }
 
-  private async readIndex(): Promise<Record<string, Partial<Record<Provider, { last4: string; verified: boolean; updatedAt: string }>>>> {
+  private async readIndex(): Promise<Record<string, Partial<Record<Provider, IndexEntry>>>> {
     try {
       return JSON.parse(await readFile(this.indexPath, "utf8"));
     } catch {
@@ -125,7 +146,7 @@ export class KeychainKeyStore implements ProviderKeyStore {
   private async updateIndex(
     userId: string,
     provider: Provider,
-    entry: { last4: string; verified: boolean; updatedAt: string } | undefined,
+    entry: IndexEntry | undefined,
   ): Promise<void> {
     const index = await this.readIndex();
     const user = index[userId] ?? {};
@@ -163,6 +184,7 @@ export class KeyStore implements ProviderKeyStore {
     return PROVIDERS.map((provider) => ({
       ...describe(provider),
       last4: keys[provider]?.last4 ?? null,
+      endpoint: keys[provider]?.endpoint ?? null,
       verified: keys[provider]?.verified ?? false,
       updatedAt: keys[provider]?.updatedAt ?? null,
     }));
@@ -170,7 +192,7 @@ export class KeyStore implements ProviderKeyStore {
 
   async set(userId: string, provider: Provider, secret: string, verified: boolean): Promise<ProviderKeyView> {
     const trimmed = secret.trim();
-    if (trimmed.length < 8 || trimmed.length > 500) throw new Error("The key must be between 8 and 500 characters.");
+    const details = secretDetails(provider, trimmed);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv, additionalData: this.aad(userId, provider) },
@@ -181,7 +203,7 @@ export class KeyStore implements ProviderKeyStore {
     keys[provider] = {
       iv: Buffer.from(iv).toString("base64"),
       ciphertext: Buffer.from(ciphertext).toString("base64"),
-      last4: trimmed.slice(-4),
+      ...details,
       verified,
       updatedAt: this.now().toISOString(),
     };

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { type IssueFetcher, formatIssueTask } from "./issue";
 import { SANDBOX_CHOICES, type SandboxChoice } from "./execution/sandbox";
-import { isProvider, PROVIDER_INFO, PROVIDERS, type Provider } from "./model/providers";
+import { credentialFromEnv, isProvider, PROVIDER_INFO, PROVIDERS, type Provider } from "./model/providers";
 
 export const DEFAULT_BUDGETS = {
   maxSteps: 120,
@@ -189,6 +189,7 @@ const MODEL_ENV: Record<Provider, string> = {
   xai: "XAI_MODEL",
   deepseek: "DEEPSEEK_MODEL",
   qwen: "QWEN_MODEL",
+  custom: "CUSTOM_MODEL",
 };
 
 function validateProvider(value: string | undefined, source: "--provider" | "MODEL_PROVIDER"): RunConfig["provider"] | undefined {
@@ -207,7 +208,8 @@ function resolveProvider(args: RunArguments, env: Record<string, string | undefi
 
   // No provider named: OpenRouter if its key is set, otherwise the first provider whose key is.
   if (env.AI_API_KEY?.trim()) return "openrouter";
-  return PROVIDERS.find((provider) => env[PROVIDER_INFO[provider].keyEnv]?.trim()) ?? "openrouter";
+  const configured = (provider: Provider) => (provider === "custom" ? env.CUSTOM_BASE_URL : env[PROVIDER_INFO[provider].keyEnv])?.trim();
+  return PROVIDERS.find((provider) => configured(provider)) ?? "openrouter";
 }
 
 function validateReasoningEffort(value: string | undefined): DeepSeekReasoningEffort | undefined {
@@ -265,8 +267,13 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const provider = resolveProvider(args, env);
   const reasoningEffort = validateReasoningEffort(args.reasoningEffort ?? env.DEEPSEEK_REASONING_EFFORT) ??
     (provider === "deepseek" ? "medium" : undefined);
-  const credentialName = PROVIDER_INFO[provider].keyEnv;
-  const apiKey = env[credentialName]?.trim();
+  const credentialName = provider === "custom" ? "CUSTOM_BASE_URL" : PROVIDER_INFO[provider].keyEnv;
+  let apiKey: string | undefined;
+  try {
+    apiKey = credentialFromEnv(provider, env);
+  } catch (error) {
+    throw new ConfigurationError(`CUSTOM_BASE_URL: ${(error as Error).message}`);
+  }
 
   if ((apiKey === undefined || apiKey === "") && args.modelScript === undefined) {
     throw new ConfigurationError(`${credentialName} is required for a ${provider} run.`);
@@ -290,7 +297,8 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
     ),
-    model: args.model?.trim() || env[MODEL_ENV[provider]]?.trim() || PROVIDER_INFO[provider].defaultModel,
+    model: args.model?.trim() || env[MODEL_ENV[provider]]?.trim() || PROVIDER_INFO[provider].defaultModel ||
+      (() => { throw new ConfigurationError("A custom endpoint needs a model: pass --model or set CUSTOM_MODEL."); })(),
     planMode: args.plan === "enabled" || args.plan === "true"
       ? true
       : args.plan === undefined || args.plan === "disabled" || args.plan === "false"
