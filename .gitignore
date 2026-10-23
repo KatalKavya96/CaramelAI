@@ -8,6 +8,8 @@ coverage/
 
 # Local delivery bundles and generated output
 caramel-commits/
+# Design boards and other generated output; kept local for now.
+output/
 *.tsbuildinfo
 .env.*
 !.env.example
