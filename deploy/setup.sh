@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # One-time setup of the shared Caramel server on a fresh Ubuntu 24.04 VPS. Run as root:
 #
-#   curl -fsSL https://raw.githubusercontent.com/KatalKavya96/CaramelAI/main/deploy/setup.sh | bash -s -- caramel.example.com
+#   curl -fsSL https://raw.githubusercontent.com/KatalKavya96/CaramelAI/main/deploy/setup.sh | sudo bash -s -- caramel.example.com
 #
 # With no domain argument it uses <public-ip>.sslip.io, which resolves to this machine, so Caddy can
 # still get a real HTTPS certificate. The script is safe to re-run; it never overwrites /etc/caramel/env.
+# CARAMEL_BRANCH picks the branch to deploy (default main).
 set -euo pipefail
 
 BUN_VERSION="1.3.14"
 REPO_URL="https://github.com/KatalKavya96/CaramelAI.git"
+BRANCH="${CARAMEL_BRANCH:-main}"
 APP_DIR="/opt/caramel"
 DATA_DIR="/var/lib/caramel"
 ENV_FILE="/etc/caramel/env"
@@ -31,6 +33,16 @@ if ! command -v caddy >/dev/null; then
 fi
 systemctl enable --now docker
 
+# Oracle Cloud's Ubuntu images ship iptables rules that reject everything but SSH, on top of the
+# VCN security list. Open HTTP (certificate challenge, redirect) and HTTPS, and keep them on reboot.
+if command -v netfilter-persistent >/dev/null; then
+  for port in 80 443; do
+    iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null \
+      || iptables -I INPUT 1 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
+  done
+  netfilter-persistent save >/dev/null
+fi
+
 echo "==> Bun $BUN_VERSION"
 if [ "$(bun --version 2>/dev/null)" != "$BUN_VERSION" ]; then
   curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s "bun-v$BUN_VERSION" >/dev/null
@@ -44,7 +56,7 @@ usermod -aG docker caramel
 install -d -o caramel -g caramel "$DATA_DIR"
 
 echo "==> Code"
-if [ ! -d "$APP_DIR/.git" ]; then git clone --quiet "$REPO_URL" "$APP_DIR"; fi
+if [ ! -d "$APP_DIR/.git" ]; then git clone --quiet --branch "$BRANCH" "$REPO_URL" "$APP_DIR"; fi
 chown -R caramel:caramel "$APP_DIR"
 
 echo "==> Secrets"
