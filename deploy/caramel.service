@@ -1,0 +1,23 @@
+[Unit]
+Description=Caramel shared server
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+User=caramel
+Group=caramel
+WorkingDirectory=/opt/caramel
+EnvironmentFile=/etc/caramel/env
+Environment=HOME=/home/caramel
+ExecStart=/usr/local/bin/bun run src/server/main.ts
+# On SIGTERM the server cancels active runs and removes their containers before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

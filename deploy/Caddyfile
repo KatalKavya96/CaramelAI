@@ -1,0 +1,8 @@
+# Caddy gets and renews the HTTPS certificate for this name automatically.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8787 {
+		# Run events are Server-Sent Events: send each one as soon as it arrives.
+		flush_interval -1
+	}
+}
