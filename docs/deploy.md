@@ -26,7 +26,13 @@ browser ──https──> Caddy (TLS, :443) ──> bun src/server/main.ts (127
 
 ## First deploy
 
-1. Create an Ubuntu 24.04 VPS with at least 2 vCPU and 2 GB of memory, and SSH in as root.
+1. Create an Ubuntu 24.04 VPS with at least 2 vCPU and 2 GB of memory, and SSH in.
+
+   On Oracle Cloud's free tier: create an instance with shape **VM.Standard.A1.Flex** (Ampere ARM,
+   e.g. 2 OCPU / 12 GB) and image **Canonical Ubuntu 24.04**, then open ports 80 and 443 in the
+   subnet's security list (Networking → Virtual cloud networks → your VCN → Security Lists →
+   Default → Add Ingress Rules: source `0.0.0.0/0`, TCP, destination ports `80,443`). SSH in as
+   `ubuntu`. The setup script opens the same ports in the instance's own iptables rules.
 2. Run the setup script, with your domain if you have one (point its DNS A record at the VPS first):
 
    ```sh
