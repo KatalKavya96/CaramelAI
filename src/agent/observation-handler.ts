@@ -8,6 +8,7 @@ import type { AgentEventWriter } from "./events";
 import { isExplorationAction } from "./policy";
 import type { ProgressTracker } from "./progress";
 import type { AgentStatus } from "./types";
+import { TERMINATION } from "./termination";
 
 export interface ToolObservationContext {
   action: Exclude<ModelAction, { type: "finish" }>;
@@ -152,7 +153,7 @@ export async function processToolObservation(
         lastVerification,
         shouldTerminate: true,
         status: "partial",
-        terminationReason: "Stagnation limit reached after repeated unchanged actions.",
+        terminationReason: TERMINATION.repeatedActions,
       };
     }
   }
@@ -186,7 +187,7 @@ export async function processToolObservation(
         lastVerification,
         shouldTerminate: true,
         status: "partial",
-        terminationReason: `Repair limit reached after ${repairAttempts} code-related failures.`,
+        terminationReason: TERMINATION.repairLimit(repairAttempts),
       };
     }
   }

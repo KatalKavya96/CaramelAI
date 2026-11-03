@@ -6,6 +6,7 @@ import { UNAVAILABLE_FINGERPRINT } from "./action-dispatcher";
 import type { InitializedRunContext } from "./run-init";
 import { renderEvidenceReport } from "./report";
 import type { AgentRunResult, AgentStatus } from "./types";
+import { TERMINATION } from "./termination";
 
 export interface FinalizeRunOptions {
   context: InitializedRunContext;
@@ -44,15 +45,14 @@ export function evaluateFinishDecision(
 
   const status: AgentStatus = verified ? "verified" : "partial";
   const terminationReason = verified
-    ? "Model requested finish with successful verification for the final code state."
+    ? TERMINATION.finishVerified
     : changedFilesCount === 0
-      ? "Model requested finish without producing code changes."
+      ? TERMINATION.finishWithoutChanges
       : diffReviewedPatchSha !== patchSha256
-        ? "Model requested finish without reviewing the final diff."
+        ? TERMINATION.finishWithoutDiffReview
         : hasTrustedChecks
-          ? "Model requested finish without successful verification for the final changed state."
-          // Not the agent's failure: say so, and how to make the next run verifiable.
-          : "No verification available: this repository has no test, build or lint command. Add one under Checks to verify runs here.";
+          ? TERMINATION.finishWithoutVerification
+          : TERMINATION.noVerificationAvailable;
 
   return { status, terminationReason };
 }
@@ -91,7 +91,7 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
   const exported = await workspace.exportPatch();
   if (!exported.ok) {
     status = "failed";
-    terminationReason = `Patch export failed: ${exported.error.message}`;
+    terminationReason = TERMINATION.patchExportFailed(exported.error.message);
   }
 
   const exportValue = exported.ok
@@ -104,7 +104,7 @@ export async function finalizeRun(options: FinalizeRunOptions): Promise<AgentRun
     : { fingerprint: UNAVAILABLE_FINGERPRINT, changedFiles: [] };
   if (!inspected.ok && status !== "failed") {
     status = "failed";
-    terminationReason = `Final workspace state is unreadable: ${inspected.error.message}`;
+    terminationReason = TERMINATION.workspaceUnreadable(inspected.error.message);
   }
   const successfulFinalState =
     finalState.changedFiles.length > 0 &&

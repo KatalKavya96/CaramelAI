@@ -19,6 +19,7 @@ import type {
   AgentStatus,
   CommandExecutor,
 } from "./types";
+import { TERMINATION } from "./termination";
 
 export { SYSTEM_PROMPT } from "../prompts";
 export { createAgentEventRenderer, defaultRunId, renderAgentEvent } from "./event-renderer";
@@ -54,7 +55,7 @@ export async function runAutonomousTask(
   let verifiedPatchSha: string | null = null;
   let diffReviewedPatchSha: string | null = null;
   let status: AgentStatus = "failed";
-  let terminationReason = "Controller stopped unexpectedly.";
+  let terminationReason: string = TERMINATION.controllerStopped;
   let summary = "No model summary was produced.";
 
   // Any unexpected error still ends in finalizeRun, so every run leaves result.json and report.md.
@@ -64,7 +65,7 @@ export async function runAutonomousTask(
     while (true) {
       if (dependencies.signal?.aborted === true) {
         status = "cancelled";
-        terminationReason = "Run cancelled by the user.";
+        terminationReason = TERMINATION.cancelled;
         break;
       }
       const remainingTimeMs = deadline - now();
@@ -72,10 +73,10 @@ export async function runAutonomousTask(
         status = "budget_exhausted";
         terminationReason =
           remainingTimeMs <= 0
-            ? "Wall-clock budget exhausted."
+            ? TERMINATION.wallClockBudget
             : steps >= options.maxSteps
-              ? "Step budget exhausted."
-              : "Model-call budget exhausted.";
+              ? TERMINATION.stepBudget
+              : TERMINATION.modelCallBudget;
         break;
       }
 
@@ -163,7 +164,7 @@ export async function runAutonomousTask(
           );
           if (stagnationInterventions >= budgets.maxStagnationInterventions) {
             status = "partial";
-            terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
+            terminationReason = TERMINATION.explorationWithoutChanges;
             break;
           }
           continue;
@@ -266,7 +267,7 @@ export async function runAutonomousTask(
     }
   } catch (error) {
     status = "failed";
-    terminationReason = `Harness error: ${error instanceof Error ? error.message : String(error)}`;
+    terminationReason = TERMINATION.harnessError(error instanceof Error ? error.message : String(error));
   }
 
   return await finalizeRun({

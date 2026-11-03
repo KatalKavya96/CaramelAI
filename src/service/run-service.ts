@@ -17,6 +17,7 @@ import {
   type RunRequest,
   type RunRequestPolicy,
 } from "./run-request";
+import { TERMINATION } from "../agent/termination";
 
 export type RunRecordStatus = "queued" | "preparing" | "running" | AgentStatus;
 
@@ -132,7 +133,7 @@ export class RunService {
         if (ACTIVE.has(record.status)) {
           await service.update(record, {
             status: "failed",
-            terminationReason: "The server stopped while this run was active.",
+            terminationReason: TERMINATION.serverStopped,
             finishedAt: service.now().toISOString(),
           });
         }
@@ -226,7 +227,7 @@ export class RunService {
     const record = this.owned(ownerId, id);
     if (record.status === "queued") {
       this.queue.splice(this.queue.indexOf(id), 1);
-      await this.update(record, { status: "cancelled", terminationReason: "Cancelled before it started.", finishedAt: this.now().toISOString() });
+      await this.update(record, { status: "cancelled", terminationReason: TERMINATION.cancelledBeforeStart, finishedAt: this.now().toISOString() });
       this.live.delete(id);
     } else {
       this.live.get(id)?.controller.abort();

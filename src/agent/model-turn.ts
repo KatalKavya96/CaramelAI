@@ -4,6 +4,7 @@ import type { FailureRecord } from "../recovery";
 import type { AgentEventWriter } from "./events";
 import { statusForModelError } from "./policy";
 import { recordUsage, type AgentStatus, type UsageSummary } from "./types";
+import { TERMINATION } from "./termination";
 
 export interface ModelTurnContext {
   model: ModelAdapter;
@@ -88,7 +89,7 @@ export async function executeModelTurn(
     return {
       kind: "terminate",
       status: statusForModelError(modelError),
-      terminationReason: `Model error (${modelError.kind}): ${modelError.message}`,
+      terminationReason: TERMINATION.modelError(modelError.kind, modelError.message),
     };
   }
 }
