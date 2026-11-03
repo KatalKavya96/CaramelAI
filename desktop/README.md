@@ -35,27 +35,46 @@ signature. Releases for other people come from CI, below.
 ## Release (macOS)
 
 Pushing a tag such as `v0.1.0` runs `.github/workflows/desktop-release.yml` on a macOS runner. It builds
-one universal app (Apple Silicon and Intel), signs it and the backend with your Developer ID, notarizes
-it, and drafts a GitHub release with the `.dmg` and `latest.json`. Installed apps check `latest.json`
-on launch and offer to update once you publish the draft.
+one universal app (Apple Silicon and Intel) and drafts a GitHub release with the `.dmg`, the app archive
+and `latest.json`. Installed apps check `latest.json` on launch and offer to update once you publish the
+draft. Updates download inside the app, so they never hit Gatekeeper.
 
-One-time setup:
+Users install it one of two ways, both described in the release notes:
 
-1. Join the Apple Developer Program. In Keychain Access, create a **Developer ID Application**
-   certificate, export it as `.p12`, and save `base64 -i cert.p12 | pbcopy` as the repository secret
-   `APPLE_CERTIFICATE`, with its password as `APPLE_CERTIFICATE_PASSWORD`. `APPLE_SIGNING_IDENTITY` is
-   the certificate's full name, e.g. `Developer ID Application: Your Name (TEAMID)`.
-2. For notarization, add `APPLE_ID`, `APPLE_TEAM_ID`, and an app-specific password from
-   account.apple.com as `APPLE_PASSWORD`.
-3. Run `bun run tauri signer generate -w ~/.tauri/caramel.key`. Put the **public** key in
-   `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` and commit it. Save the private key file's
-   contents as `TAURI_SIGNING_PRIVATE_KEY` and its password as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-   Back the private key up: lose it and installed apps can never update again.
+- **Terminal:** `curl -fsSL https://raw.githubusercontent.com/KatalKavya96/CaramelAI/main/scripts/install-desktop.sh | sh`.
+  Files curl downloads are not quarantined, so the app opens without a prompt.
+- **.dmg:** without notarization, macOS blocks the first launch. The user tries to open it, then clicks
+  **Open Anyway** in System Settings → Privacy & Security. (Right-click → Open no longer works on macOS 15.)
 
-Each release: raise `version` in `src-tauri/tauri.conf.json` (the updater only installs a higher
-version), tag that commit `v<version>`, push the tag, download the draft's `.dmg` and open it on a Mac,
-then publish the release.
+### One-time setup
 
-The backend's entitlements (`src-tauri/Entitlements.plist`) let Bun's JIT run under the hardened runtime
-that notarization requires. Users need `git` (macOS offers to install the command line tools the first
-time it runs). Docker is not needed on macOS: commands run in the built-in `sandbox-exec` sandbox.
+Run `bun run tauri signer generate -w ~/.tauri/caramel.key`. Put the **public** key in
+`plugins.updater.pubkey` in `src-tauri/tauri.conf.json` and commit it. In the repository's Actions secrets,
+save the private key file's contents as `TAURI_SIGNING_PRIVATE_KEY` and its password as
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Back the private key up: lose it and installed apps can never update
+again. This key is free and has nothing to do with Apple.
+
+### Signing: ad-hoc now, Developer ID later
+
+With no Apple secrets, the workflow signs the app ad-hoc (`codesign -s -`). That is not trust, only a seal
+over the bundle's files: an unsigned bundle shows "Caramel is damaged" on Apple Silicon, which no setting
+gets past. Two costs remain: the `.dmg` needs Open Anyway once, and the Keychain asks again for saved API
+keys after each update, because an ad-hoc signature changes with every build.
+
+To remove both later, join the Apple Developer Program and add these secrets; the workflow then signs with
+your Developer ID and notarizes, and the release notes' Open Anyway paragraph can go:
+
+1. `APPLE_CERTIFICATE`: a **Developer ID Application** certificate exported from Keychain Access as `.p12`,
+   then `base64 -i cert.p12 | pbcopy`. `APPLE_CERTIFICATE_PASSWORD`: its export password.
+   `APPLE_SIGNING_IDENTITY`: its full name, from `security find-identity -v -p codesigning`.
+2. `APPLE_ID`, `APPLE_TEAM_ID`, and an app-specific password from account.apple.com as `APPLE_PASSWORD`.
+
+### Each release
+
+Raise `version` in `src-tauri/tauri.conf.json` (the updater only installs a higher version), tag that
+commit `v<version>`, push the tag, download the draft's `.dmg` and open it on a Mac, then publish the
+release. The install script and in-app updates only see published releases.
+
+The backend's entitlements (`src-tauri/Entitlements.plist`) let Bun's JIT run under the hardened runtime.
+Users need `git` (macOS offers to install the command line tools the first time it runs). Docker is not
+needed on macOS: commands run in the built-in `sandbox-exec` sandbox.
