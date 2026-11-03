@@ -97,17 +97,38 @@ function textContent(content: unknown): string {
   throw new ModelTransportError("transient", "OpenRouter returned no text content.");
 }
 
+/** OpenRouter tries these in order; three keeps a run's behaviour easy to explain. */
+export const MAX_OPENROUTER_FALLBACKS = 3;
+
+/**
+ * "a:free, b:free" names a fallback list: when one model is rate-limited or down, OpenRouter
+ * answers with the next. OpenRouter bills the model that answered, so a list mixing free and paid
+ * models can cost money even when the first one is free.
+ */
+export function parseOpenRouterModels(model: string): string[] {
+  const models = [...new Set(model.split(",").map((part) => part.trim()).filter((part) => part !== ""))];
+  if (models.length === 0) throw new Error("Name an OpenRouter model, such as qwen/qwen3-coder:free.");
+  if (models.length > MAX_OPENROUTER_FALLBACKS) {
+    throw new Error(`List at most ${MAX_OPENROUTER_FALLBACKS} OpenRouter models to fall back between.`);
+  }
+  return models;
+}
+
 export class OpenRouterTransport implements ModelTransport {
+  private readonly models: string[];
+
   constructor(
     private readonly client: OpenRouterChatClient,
-    private readonly model: string,
-  ) {}
+    model: string,
+  ) {
+    this.models = parseOpenRouterModels(model);
+  }
 
   async send(request: ModelRequest, signal: AbortSignal): Promise<unknown> {
     try {
       const response = await this.client.chat.send({
         chatRequest: {
-          model: this.model,
+          ...(this.models.length === 1 ? { model: this.models[0] } : { models: this.models }),
           messages: request.messages.map(({ role, content }) => ({ role, content })),
           responseFormat: {
             type: "json_schema",
@@ -123,6 +144,7 @@ export class OpenRouterTransport implements ModelTransport {
         throw new ModelTransportError("permanent", "OpenRouter returned an invalid chat response.");
       }
       const result = response as {
+        model?: unknown;
         choices: Array<{ message?: { content?: unknown }; error?: unknown }>;
         usage?: {
           promptTokens: number;
@@ -139,6 +161,8 @@ export class OpenRouterTransport implements ModelTransport {
         // OpenRouter reports the charge itself, so cost needs no price table that could go stale.
         cachedInputTokens: result.usage.promptTokensDetails?.cachedTokens,
         costUsd: result.usage.cost,
+        // With a fallback list this is the only record of which model did the work.
+        model: typeof result.model === "string" ? result.model : undefined,
       };
       // A provider can fail after OpenRouter accepted the request: the error then rides in the choice.
       const choiceError = result.choices[0]?.error;

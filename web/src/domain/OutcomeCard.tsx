@@ -25,6 +25,7 @@ export interface OutcomeCardProps {
 /** The end of a turn: what happened, why it stopped, and what to do next. */
 export function OutcomeCard({ status, summary, terminationReason, metrics, usage, changedFileCount, actions }: OutcomeCardProps) {
   const copy = statusCopy(status);
+  const answeredBy = Object.keys(usage?.answeredBy ?? {});
   const tokens = usage === undefined ? null : usage.providerTotalTokens > 0 ? usage.providerTotalTokens : usage.estimatedTotalTokens;
   return (
     <section className={[styles.card, styles[`tone-${copy.tone}`]].join(" ")} aria-label={`Outcome: ${copy.label}`}>
@@ -47,6 +48,8 @@ export function OutcomeCard({ status, summary, terminationReason, metrics, usage
           </>
         )}
         {tokens === null ? null : <li>{formatTokens(tokens)} tokens{usage !== undefined && usage.providerTotalTokens === 0 ? " (estimated)" : ""}</li>}
+        {/* With a fallback list, which model did the work is part of the result. */}
+        {answeredBy.length === 0 ? null : <li>Answered by {answeredBy.join(", ")}</li>}
       </ul>
       {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}
     </section>

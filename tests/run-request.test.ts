@@ -58,4 +58,8 @@ describe("RunRequest", () => {
       "budgets.maxMinutes: 600 exceeds this server's limit of 30.",
     ]);
   });
+  test("accepts an OpenRouter fallback list of up to three models", () => {
+    expect(issues({ ...base, model: "qwen/qwen3-coder:free, z-ai/glm-4.5-air:free" })).toEqual([]);
+    expect(issues({ ...base, model: "a:free,b:free,c:free,d:free" })).toEqual(["model: List at most 3 OpenRouter models to fall back between."]);
+  });
 });

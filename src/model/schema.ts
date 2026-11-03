@@ -236,6 +236,7 @@ export function parseProviderUsage(value: unknown): ModelUsage {
       ? {}
       : { cachedInputTokens: tokenCount(usage.cachedInputTokens, "usage.cachedInputTokens") }),
     ...(usage.costUsd === undefined || usage.costUsd === null ? {} : { costUsd: dollars(usage.costUsd, "usage.costUsd") }),
+    ...(typeof usage.model === "string" && usage.model !== "" ? { model: usage.model } : {}),
   };
 }
 

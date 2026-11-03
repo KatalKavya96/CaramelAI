@@ -52,6 +52,8 @@ export type ModelUsage =
       cachedInputTokens?: number;
       /** What the provider says it charged, in US dollars. Absent when it does not report cost. */
       costUsd?: number;
+      /** The model that answered, when the provider says; it can differ from the one asked for. */
+      model?: string;
     }
   | { source: "unavailable" };
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createOpenRouterModel, MODEL_DECISION_SCHEMA } from "../src/model";
+import { createOpenRouterModel, MODEL_DECISION_SCHEMA, parseOpenRouterModels } from "../src/model";
+import { emptyUsageSummary, recordUsage } from "../src/agent/types";
 
 describe("OpenRouter model transport", () => {
   test("sends the generated decision schema as structured output and maps content and usage", async () => {
@@ -152,5 +153,40 @@ describe("OpenRouter rate limits", () => {
     });
     const turn = await model.complete({ messages: [{ role: "user", content: "Inspect it" }] });
     expect(turn.usage).toEqual({ source: "provider", inputTokens: 1000, outputTokens: 50, totalTokens: 1050, cachedInputTokens: 800, costUsd: 0.0021 });
+  });
+  test("sends a comma-separated list as OpenRouter fallbacks and records which model answered", async () => {
+    let request: any;
+    const model = createOpenRouterModel({
+      apiKey: "k",
+      model: "qwen/qwen3-coder:free, z-ai/glm-4.5-air:free",
+      client: {
+        chat: {
+          async send(nextRequest) {
+            request = nextRequest;
+            return {
+              model: "z-ai/glm-4.5-air:free",
+              choices: [{ message: { content: JSON.stringify({ action: { type: "inspect_diff" } }) } }],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2, cost: 0 },
+            };
+          },
+        },
+      },
+    });
+
+    const turn = await model.complete({ messages: [{ role: "user", content: "Inspect it" }] });
+
+    expect(request.chatRequest.models).toEqual(["qwen/qwen3-coder:free", "z-ai/glm-4.5-air:free"]);
+    expect(request.chatRequest.model).toBeUndefined();
+    expect(turn.usage).toMatchObject({ model: "z-ai/glm-4.5-air:free" });
+    const summary = emptyUsageSummary();
+    recordUsage(summary, turn.usage);
+    recordUsage(summary, turn.usage);
+    expect(summary.answeredBy).toEqual({ "z-ai/glm-4.5-air:free": 2 });
+  });
+
+  test("keeps a single model as model, and refuses empty or overlong lists", () => {
+    expect(parseOpenRouterModels(" a:free , a:free ")).toEqual(["a:free"]);
+    expect(() => parseOpenRouterModels(" , ")).toThrow("Name an OpenRouter model");
+    expect(() => parseOpenRouterModels("a,b,c,d")).toThrow("at most 3");
   });
 });

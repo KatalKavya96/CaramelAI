@@ -36,6 +36,12 @@ describe("OutcomeCard", () => {
     expect(screen.getByText("Tests failed on the final code.")).toBeInTheDocument();
     expect(screen.getByText("1 file changed")).toBeInTheDocument();
   });
+
+  it("names the models that answered", () => {
+    const usage = { providerInputTokens: 0, providerOutputTokens: 0, providerTotalTokens: 10, estimatedInputTokens: 0, estimatedOutputTokens: 0, estimatedTotalTokens: 0, unavailableCalls: 0, cachedInputTokens: 0, providerCostUsd: 0, costUnknownCalls: 0, modelTimeMs: 0, answeredBy: { "qwen/qwen3-coder:free": 3, "z-ai/glm-4.5-air:free": 1 } };
+    render(<OutcomeCard status="verified" summary={null} terminationReason={null} usage={usage} changedFileCount={0} />);
+    expect(screen.getByText("Answered by qwen/qwen3-coder:free, z-ai/glm-4.5-air:free")).toBeInTheDocument();
+  });
 });
 
 describe("BudgetMeters", () => {
@@ -102,5 +108,13 @@ describe("ModelPicker", () => {
     expect(screen.getByRole("button", { name: /gpt-5\.2 · paid/ })).toBeInTheDocument();
     rerender(<ModelPicker providers={[view]} provider="openrouter" model="poolside/laguna-s-2.1:free" onChange={vi.fn()} onManageKeys={vi.fn()} />);
     expect(screen.queryByText(/paid/)).not.toBeInTheDocument();
+  });
+
+  it("calls a fallback list paid when any entry is paid, and shortens it", () => {
+    const view = { provider: "openrouter" as const, label: "OpenRouter", keyUrl: "", reportsCost: true, oauth: true, endpoint: null, last4: "9f2c", verified: true, defaultModel: "openai/gpt-5.2", updatedAt: null };
+    const { rerender } = render(<ModelPicker providers={[view]} provider="openrouter" model="qwen/qwen3-coder:free, z-ai/glm-4.5-air:free" short onChange={vi.fn()} onManageKeys={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "qwen3-coder:free +1" })).toBeInTheDocument();
+    rerender(<ModelPicker providers={[view]} provider="openrouter" model="qwen/qwen3-coder:free, openai/gpt-5.2" short onChange={vi.fn()} onManageKeys={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "qwen3-coder:free +1 · paid" })).toBeInTheDocument();
   });
 });

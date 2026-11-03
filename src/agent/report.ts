@@ -46,6 +46,9 @@ export function renderEvidenceReport(result: AgentRunResult, finalFingerprint: s
     `- Cached input tokens: ${result.usage.cachedInputTokens}`,
     `- Provider-reported cost: $${result.usage.providerCostUsd.toFixed(4)}${result.usage.costUnknownCalls > 0 ? ` (at least; ${result.usage.costUnknownCalls} calls did not report cost)` : ""}`,
     `- Time waiting on the model: ${result.usage.modelTimeMs} ms of ${result.metrics.durationMs} ms`,
+    ...(result.usage.answeredBy === undefined
+      ? []
+      : [`- Answered by: ${Object.entries(result.usage.answeredBy).map(([model, calls]) => `${model} (${calls})`).join(", ")}`]),
     "",
     "## Artifacts",
     "",

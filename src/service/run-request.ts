@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { DEFAULT_BUDGETS } from "../config";
+import { parseOpenRouterModels } from "../model/openrouter";
 import { PROVIDERS } from "../model/providers";
 
 /**
@@ -143,6 +144,13 @@ export function parseRunRequest(input: unknown, policy: RunRequestPolicy): RunRe
   };
   if (request.network === "full" && !policy.allowRunNetwork && policy.commandNetwork !== "bridge") {
     issues.push("network: this server runs commands without network access.");
+  }
+  if (request.provider === "openrouter" && request.model !== undefined) {
+    try {
+      parseOpenRouterModels(request.model);
+    } catch (error) {
+      issues.push(`model: ${(error as Error).message}`);
+    }
   }
   if (request.provider === "custom" && !policy.allowCustomEndpoint) {
     issues.push("provider: custom endpoints are available only in the desktop app.");

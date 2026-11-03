@@ -17,16 +17,27 @@ export interface ModelPickerProps {
   short?: boolean;
 }
 
-/** The top-left pill from the mockups, now listing the providers you have keys for. */
-/** OpenRouter's free variants end in ":free"; anything else there bills the key. Other providers always bill. */
+/**
+ * OpenRouter's free variants end in ":free"; anything else there bills the key. Other providers always bill.
+ * In an OpenRouter fallback list ("a:free, b:free") one paid entry is enough to be charged.
+ */
 export function isPaidModel(provider: Provider, model: string): boolean {
-  return provider !== "custom" && !model.endsWith(":free");
+  if (provider === "custom") return false;
+  return model.split(",").map((part) => part.trim()).filter((part) => part !== "").some((part) => !part.endsWith(":free"));
 }
 
+/** "qwen/qwen3-coder:free, z-ai/glm-4.5-air:free" reads as "qwen3-coder:free +1". */
+function shortModelName(model: string): string {
+  const [first = model, ...rest] = model.split(",").map((part) => part.trim()).filter((part) => part !== "");
+  const tail = first.split("/").at(-1) ?? first;
+  return rest.length === 0 ? tail : `${tail} +${rest.length}`;
+}
+
+/** The top-left pill from the mockups, now listing the providers you have keys for. */
 export function ModelPicker({ providers, provider, model, onChange, onManageKeys, short = false }: ModelPickerProps) {
   const connected = providers.filter((view) => view.last4 !== null);
   const [otherOpen, setOtherOpen] = useState(false);
-  const name = provider === null ? "Connect a model" : short ? (model.split("/").at(-1) ?? model) : `${PROVIDER_COPY[provider].name} · ${model}`;
+  const name = provider === null ? "Connect a model" : short ? shortModelName(model) : `${PROVIDER_COPY[provider].name} · ${model}`;
   const label = provider !== null && provider === "openrouter" && isPaidModel(provider, model) ? `${name} · paid` : name;
   return (
     <>
@@ -89,7 +100,7 @@ function OtherModelDialog({ open, onOpenChange, connected, provider, model, onSa
         <TextField
           label="Model id"
           placeholder={chosen === null ? "" : PROVIDER_COPY[chosen].modelExample}
-          hint={chosen === "openrouter" ? (draftModel.trim() !== "" && isPaidModel(chosen, draftModel.trim()) ? "This model is paid: each run is charged to your key. Free models end in :free." : "Free models end in :free, for example qwen/qwen3-coder:free.") : undefined}
+          hint={chosen === "openrouter" ? (draftModel.trim() !== "" && isPaidModel(chosen, draftModel.trim()) ? "This model is paid: each run is charged to your key. Free models end in :free." : "Free models end in :free. List up to 3, separated by commas, to fall back when one is busy.") : undefined}
           value={draftModel}
           onChange={(event) => setDraftModel(event.target.value)}
           spellCheck={false}

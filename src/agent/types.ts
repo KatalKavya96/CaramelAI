@@ -86,6 +86,8 @@ export interface UsageSummary {
   costUnknownCalls: number;
   /** Wall time spent waiting on the model, including failed calls and retries. */
   modelTimeMs: number;
+  /** Calls per model that answered, as the provider reported it. Absent in runs recorded before it existed. */
+  answeredBy?: Record<string, number>;
 }
 
 export interface AgentRunResult {
@@ -152,6 +154,9 @@ export function recordUsage(summary: UsageSummary, usage: ModelUsage): void {
     summary.providerOutputTokens += usage.outputTokens;
     summary.providerTotalTokens += usage.totalTokens;
     summary.cachedInputTokens += usage.cachedInputTokens ?? 0;
+    if (usage.model !== undefined) {
+      summary.answeredBy = { ...summary.answeredBy, [usage.model]: (summary.answeredBy?.[usage.model] ?? 0) + 1 };
+    }
     if (usage.costUsd === undefined) summary.costUnknownCalls += 1;
     else summary.providerCostUsd += usage.costUsd;
     return;
