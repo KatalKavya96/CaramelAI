@@ -89,6 +89,19 @@ describe("RunService", () => {
     await expect(service.cancel("someone-else", run.id)).rejects.toBeInstanceOf(RunNotFoundError);
   });
 
+  test("gives web runs the same repair, stagnation and reserve allowances as the CLI", async () => {
+    let seen: Parameters<typeof runAutonomousTask>[0] | undefined;
+    const runTask = (async (options: Parameters<typeof runAutonomousTask>[0]) => {
+      seen = options;
+      return { status: "partial", terminationReason: "stub", changedFiles: [] } as unknown as AgentRunResult;
+    }) as unknown as typeof runAutonomousTask;
+    const service = await openService({ runTask, prepareRepository: async () => "/unused" });
+    const run = await service.start("kavya", { task: "look", provider: "openrouter", repo: { kind: "local", path: await sourceRepo() } });
+    await waitFor(() => service.get("kavya", run.id).status === "partial");
+
+    expect(seen).toMatchObject({ maxRepairAttempts: 12, maxStagnationInterventions: 6, verificationReserveSteps: 10 });
+  });
+
   test("replays the event log to a late subscriber, resuming after a sequence", async () => {
     const service = await openService();
     const run = await service.start("kavya", { task: "look", provider: "openrouter", repo: { kind: "local", path: await sourceRepo() } });

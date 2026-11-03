@@ -151,7 +151,7 @@ export async function runAutonomousTask(
 
       steps += 1;
       try {
-        const explorationError = explorationRejection(decision.action, unchangedExplorationSteps);
+        const explorationError = explorationRejection(decision.action, unchangedExplorationSteps, budgets.maxUnchangedExplorationSteps);
         if (explorationError !== null) {
           steps -= 1;
           stagnationInterventions += 1;
@@ -212,6 +212,7 @@ export async function runAutonomousTask(
             trustedChecks: ctx.trustedChecks,
             maxStagnationInterventions: budgets.maxStagnationInterventions,
             maxRepairAttempts: budgets.maxRepairAttempts,
+            maxUnchangedExplorationSteps: budgets.maxUnchangedExplorationSteps,
           },
           {
             verifiedPatchSha,

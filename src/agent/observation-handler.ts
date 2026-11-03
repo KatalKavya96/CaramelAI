@@ -5,7 +5,7 @@ import type { FailureRecord } from "../recovery";
 import { createEvidence, isTrustedVerification, type DiscoveredCheck, type VerificationEvidence } from "../verification";
 import type { ToolObservation } from "./action-dispatcher";
 import type { AgentEventWriter } from "./events";
-import { DIRECT_IMPLEMENTATION_GUIDANCE_STEP, isExplorationAction, MAX_UNCHANGED_EXPLORATION_STEPS } from "./policy";
+import { isExplorationAction } from "./policy";
 import type { ProgressTracker } from "./progress";
 import type { AgentStatus } from "./types";
 
@@ -21,6 +21,7 @@ export interface ToolObservationContext {
   trustedChecks: readonly DiscoveredCheck[];
   maxStagnationInterventions: number;
   maxRepairAttempts: number;
+  maxUnchangedExplorationSteps: number;
 }
 
 export interface ObservationProcessResult {
@@ -68,11 +69,11 @@ export async function processToolObservation(
     unchangedExplorationSteps = 0;
   } else if (isExplorationAction(action)) {
     unchangedExplorationSteps += 1;
-    if (unchangedExplorationSteps === DIRECT_IMPLEMENTATION_GUIDANCE_STEP) {
+    if (unchangedExplorationSteps === ctx.maxUnchangedExplorationSteps - 1) {
       memory.recordGuidance(
         "Planning is complete. State the issue requirement addressed in intent, inspect at most one missing exact range, and then edit the relevant implementation or focused test.",
       );
-    } else if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
+    } else if (unchangedExplorationSteps === ctx.maxUnchangedExplorationSteps) {
       memory.recordGuidance(
         "The focused inspection phase is complete. Edit now using a unified diff patch, replace_text with a non-empty exact unique snippet, or replace_file with complete content. Tie the edit to the GitHub issue description; finish only if the task cannot be completed.",
       );

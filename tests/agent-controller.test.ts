@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  defaultExplorationAllowance,
   INITIAL_RUN_STATE,
   reduceRunState,
   replayRunState,
@@ -128,6 +129,7 @@ async function runWithScript(options: {
   source: string;
   script: readonly (ModelTurn | Error)[];
   maxSteps?: number;
+  maxModelCalls?: number;
   maxRepairAttempts?: number;
   maxContextChars?: number;
   verificationReserveSteps?: number;
@@ -147,7 +149,7 @@ async function runWithScript(options: {
       task: "Fix add so the existing test passes.",
       maxSteps: options.maxSteps ?? 10,
       maxMinutes: 2,
-      maxModelCalls: 10,
+      maxModelCalls: options.maxModelCalls ?? 10,
       ...(options.maxRepairAttempts === undefined ? {} : { maxRepairAttempts: options.maxRepairAttempts }),
       ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
       ...(options.verificationReserveSteps === undefined ? {} : { verificationReserveSteps: options.verificationReserveSteps }),
@@ -664,6 +666,31 @@ describe("autonomous agent vertical slice", () => {
     expect(model.requests[4]?.messages.map((message) => message.content).join("\n")).toContain(
       "focused inspection phase is complete",
     );
+  });
+
+  test("scales the exploration allowance with the step budget, between 4 and 15", () => {
+    expect([10, 20, 40, 80, 120, 300].map(defaultExplorationAllowance)).toEqual([4, 4, 5, 10, 15, 15]);
+  });
+
+  test("lets a large step budget read more of the repository before asking for an edit", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      maxSteps: 120,
+      maxModelCalls: 20,
+      maxStagnationInterventions: 2,
+      script: [
+        ...Array.from({ length: 10 }, (_, index) =>
+          turn({ type: "list_files" as const, path: ".", maxDepth: index + 1 })),
+        turn({ type: "replace_file", path: "src/math.ts", content: "export function add(a: number, b: number): number {\n  return a + b;\n}\n" }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Explored, fixed and verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    expect(result.metrics.stagnationInterventions).toBe(0);
   });
 
   test("blocks shell file-printing after prior unchanged inspection", async () => {

@@ -13,6 +13,8 @@ export interface AutonomousRunOptions {
   maxContextChars?: number;
   verificationReserveSteps?: number;
   maxStagnationInterventions?: number;
+  /** Reads, searches and listings allowed in a row without a code change. Defaults to a share of maxSteps. */
+  maxUnchangedExplorationSteps?: number;
   repositoryMapEnabled?: boolean;
   /**
    * Commands the completion gate accepts as verification. When omitted, checks discovered from
@@ -49,11 +51,21 @@ export interface ValidatedRunBudgets {
   maxRepairAttempts: number;
   verificationReserveSteps: number;
   maxStagnationInterventions: number;
+  maxUnchangedExplorationSteps: number;
 }
 
-export const DIRECT_IMPLEMENTATION_GUIDANCE_STEP = 3;
-export const MAX_UNCHANGED_EXPLORATION_STEPS = 4;
+export const MIN_UNCHANGED_EXPLORATION_STEPS = 4;
+export const MAX_DEFAULT_EXPLORATION_STEPS = 15;
 export const MAX_UNCHANGED_SHELL_FILE_READS = 2;
+
+/**
+ * A fixed allowance of four reads suits a small benchmark issue but ends a real task in an
+ * unfamiliar repository before the agent has found the code. The allowance grows with the step
+ * budget, between 4 and 15.
+ */
+export function defaultExplorationAllowance(maxSteps: number): number {
+  return Math.min(MAX_DEFAULT_EXPLORATION_STEPS, Math.max(MIN_UNCHANGED_EXPLORATION_STEPS, Math.floor(maxSteps / 8)));
+}
 
 export function validateRunOptions(options: AutonomousRunOptions): ValidatedRunBudgets {
   if (!Number.isInteger(options.maxSteps) || options.maxSteps <= 0) {
@@ -85,7 +97,11 @@ export function validateRunOptions(options: AutonomousRunOptions): ValidatedRunB
   if (!Number.isInteger(maxStagnationInterventions) || maxStagnationInterventions <= 0) {
     throw new Error("maxStagnationInterventions must be a positive integer.");
   }
-  return { maxRepairAttempts, verificationReserveSteps, maxStagnationInterventions };
+  const maxUnchangedExplorationSteps = options.maxUnchangedExplorationSteps ?? defaultExplorationAllowance(options.maxSteps);
+  if (!Number.isInteger(maxUnchangedExplorationSteps) || maxUnchangedExplorationSteps <= 0) {
+    throw new Error("maxUnchangedExplorationSteps must be a positive integer.");
+  }
+  return { maxRepairAttempts, verificationReserveSteps, maxStagnationInterventions, maxUnchangedExplorationSteps };
 }
 
 export function isExplorationAction(action: Exclude<ModelAction, { type: "finish" }>): boolean {
@@ -108,8 +124,9 @@ export function looksLikeShellFileRead(action: Exclude<ModelAction, { type: "fin
 export function explorationRejection(
   action: Exclude<ModelAction, { type: "finish" }>,
   unchangedExplorationSteps: number,
+  maxUnchangedExplorationSteps: number,
 ): string | null {
-  if (unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS && isExplorationAction(action)) {
+  if (unchangedExplorationSteps >= maxUnchangedExplorationSteps && isExplorationAction(action)) {
     return "Action rejected because the unchanged-code exploration limit was reached. The next action must edit or conclude: apply_patch with a unified diff, replace_text with a non-empty exact unique snippet, replace_file with complete file content, inspect_diff, or finish.";
   }
   if (unchangedExplorationSteps >= MAX_UNCHANGED_SHELL_FILE_READS && looksLikeShellFileRead(action)) {

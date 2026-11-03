@@ -8,6 +8,7 @@ import {
   type AutonomousRunDependencies,
 } from "../agent";
 import type { ModelAdapter } from "../model";
+import { DEFAULT_BUDGETS } from "../config";
 import { prepareRepository } from "./repo-source";
 import {
   FollowUpRequestSchema,
@@ -378,6 +379,11 @@ export class RunService {
           maxSteps: record.request.budgets.maxSteps,
           maxMinutes: record.request.budgets.maxMinutes,
           maxModelCalls: record.request.budgets.maxModelCalls,
+          // The same allowances the CLI uses; the agent's bare defaults are tuned for small test runs.
+          maxRepairAttempts: DEFAULT_BUDGETS.maxRepairAttempts,
+          maxStagnationInterventions: DEFAULT_BUDGETS.maxStagnationInterventions,
+          verificationReserveSteps: Math.min(DEFAULT_BUDGETS.verificationReserveSteps, record.request.budgets.maxSteps - 1),
+          maxContextChars: DEFAULT_BUDGETS.maxContextChars,
           commandNetwork: record.request.network === "full" ? "bridge" : "none",
           sandbox: this.options.policy.sandbox,
           // Commands must never see other runs or the server's key store.
