@@ -1,7 +1,9 @@
 name: desktop-release
 
-# Builds, signs and notarizes the macOS app and drafts a GitHub release with the .dmg and the
-# updater feed (latest.json). Push a tag that matches the app version, e.g. `git tag v0.1.0`.
+# Builds the macOS app and drafts a GitHub release with the .dmg, the updater feed (latest.json)
+# and the archive scripts/install-desktop.sh installs. Push a tag that matches the app version,
+# e.g. `git tag v0.1.0`. With the Apple secrets set, the app is signed with your Developer ID and
+# notarized; without them it is ad-hoc signed, and users open it once with "Open Anyway".
 # The release stays a draft until you publish it, and installed apps only see an update once
 # it is published, so test the draft's .dmg first.
 on:
@@ -43,9 +45,10 @@ jobs:
       - run: bun run web && bun run backend --universal
         working-directory: desktop
 
-      - uses: tauri-apps/tauri-action@v0
+      # Tauri treats a variable that is set as present, so an unset secret (an empty string here)
+      # would make it import an empty certificate and fail. Export only the ones that exist.
+      - name: Choose how to sign
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Developer ID Application certificate, exported from Keychain Access as .p12, base64-encoded.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -54,6 +57,22 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
+            done
+            echo "Signing with the Developer ID certificate."
+          else
+            # "-" is an ad-hoc signature: no certificate, but every file in the bundle is sealed.
+            # An unsigned bundle shows "Caramel is damaged" on Apple Silicon, which users cannot open.
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "No Apple certificate: ad-hoc signing, no notarization."
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signs the update itself, from `bun run tauri signer generate`. Different from the Apple certificate.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -63,4 +82,17 @@ jobs:
           args: --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
           tagName: ${{ github.ref_name }}
           releaseName: Caramel ${{ github.ref_name }}
+          releaseBody: |
+            **Install from Terminal** (no security prompt):
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/KatalKavya96/CaramelAI/main/scripts/install-desktop.sh | sh
+            ```
+
+            **Or download the .dmg** below and drag Caramel to Applications. Caramel is not notarized by
+            Apple, so the first launch is blocked: open it once, then go to System Settings → Privacy &
+            Security, click **Open Anyway** next to the Caramel message, and confirm. Later launches and
+            updates open normally.
+
+            Caramel needs `git`. If macOS offers to install the command line developer tools, accept.
           releaseDraft: true
