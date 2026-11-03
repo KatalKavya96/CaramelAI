@@ -22,7 +22,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_THE_PUBLIC_KEY_FROM_tauri_signer_generate",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIzMkY0NTk1RDQ1NjdENjQKUldSa2ZWYlVsVVV2czRFWjhhVGZHWGgvVUN3dWdITVZxR3ljNkQzblhlSG9EeXQvRFgwNTNuUlYK",
       "endpoints": ["https://github.com/KatalKavya96/CaramelAI/releases/latest/download/latest.json"]
     }
   }
