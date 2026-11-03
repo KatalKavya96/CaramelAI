@@ -23,7 +23,13 @@ export interface AgentPlan {
   answers: PlanAnswer[];
 }
 
-export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed" | "cancelled";
+/** How a run can end. Servers, the web app and reports all derive their status lists from this one. */
+export const AGENT_STATUSES = ["verified", "partial", "blocked", "budget_exhausted", "failed", "cancelled"] as const;
+export type AgentStatus = (typeof AGENT_STATUSES)[number];
+
+export function isAgentStatus(status: string): status is AgentStatus {
+  return (AGENT_STATUSES as readonly string[]).includes(status);
+}
 
 /** Bumped when an event payload changes shape, so readers of old events.jsonl files can tell. */
 export const AGENT_EVENT_SCHEMA_VERSION = 1;

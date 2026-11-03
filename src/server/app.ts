@@ -16,6 +16,7 @@ import {
 } from "../service";
 import type { Authenticator } from "./auth";
 import { encodeCustomCredential } from "../model/providers";
+import { isFinishedRunStatus } from "../service/run-status";
 
 /** What this server can do, so one UI adapts to the hosted site and the desktop app. */
 export interface Capabilities {
@@ -151,7 +152,6 @@ async function body(request: Request): Promise<unknown> {
   }
 }
 
-const TERMINAL = new Set(["verified", "partial", "blocked", "budget_exhausted", "failed", "cancelled"]);
 
 /**
  * The HTTP API as a fetch handler, so tests call it directly without opening a port.
@@ -309,7 +309,7 @@ async function events(options: AppOptions, userId: string, id: string, request: 
       // A run that ended without an agent event log (clone failure, cancelled while queued)
       // has nothing more to stream; tell the client to read the run record instead.
       const current = options.service.get(userId, id);
-      if (!closed && TERMINAL.has(current.status)) {
+      if (!closed && isFinishedRunStatus(current.status)) {
         controller.enqueue(encoder.encode(`event: run_closed\ndata: ${JSON.stringify({ status: current.status })}\n\n`));
         close();
         return;

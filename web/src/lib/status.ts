@@ -1,4 +1,4 @@
-import type { AgentStatus, RunRecordStatus } from "./contract";
+import { isFinishedRunStatus, type AgentStatus, type RunRecordStatus } from "./contract";
 
 export type StatusTone = "neutral" | "active" | "success" | "warning" | "danger";
 
@@ -25,12 +25,10 @@ export function statusCopy(status: RunRecordStatus): StatusCopy {
   return COPY[status];
 }
 
-const TERMINAL = new Set<RunRecordStatus>(["verified", "partial", "blocked", "budget_exhausted", "failed", "cancelled"]);
-
 export function isTerminal(status: RunRecordStatus): status is AgentStatus {
-  return TERMINAL.has(status);
+  return isFinishedRunStatus(status);
 }
 
 export function isActive(status: RunRecordStatus): boolean {
-  return !TERMINAL.has(status);
+  return !isFinishedRunStatus(status);
 }

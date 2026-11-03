@@ -18,8 +18,9 @@ import {
   type RunRequestPolicy,
 } from "./run-request";
 import { TERMINATION } from "../agent/termination";
+import { ACTIVE_RUN_STATUSES, type RunRecordStatus } from "./run-status";
 
-export type RunRecordStatus = "queued" | "preparing" | "running" | AgentStatus;
+export type { RunRecordStatus } from "./run-status";
 
 /** What the service persists about a run in `<runsRoot>/<id>/run.json`. */
 export interface RunRecord {
@@ -101,7 +102,7 @@ interface LiveRun {
   apiKey: string;
 }
 
-const ACTIVE: ReadonlySet<RunRecordStatus> = new Set(["queued", "preparing", "running"]);
+const ACTIVE: ReadonlySet<RunRecordStatus> = new Set(ACTIVE_RUN_STATUSES);
 
 /**
  * Owns every run: validation, ownership, the queue, cancellation and event fan-out. The HTTP

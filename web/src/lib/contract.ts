@@ -8,6 +8,7 @@ import type { Capabilities, clientResult } from "@core/server/app";
 export type { AgentEvent, AgentEventPayloads, AgentEventType, AgentStatus, UsageSummary } from "@core/agent/types";
 export type { RunState, RunStepView } from "@core/agent/run-state";
 export { INITIAL_RUN_STATE, reduceRunState } from "@core/agent/run-state";
+export { isFinishedRunStatus } from "@core/service/run-status";
 export type { ApplyResult, RunView, RunRecordStatus } from "@core/service/run-service";
 export type { Capabilities } from "@core/server/app";
 export type { KeyTestResult, Provider, ProviderKeyView } from "@core/service/key-store";
