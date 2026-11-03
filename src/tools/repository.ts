@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
@@ -8,11 +8,13 @@ import type {
   FileReadResult,
   RepositoryDiff,
   RepositoryMetadata,
-  RepositoryToolErrorCode,
   RepositoryToolResult,
   SearchMatch,
   SearchResult,
 } from "./types";
+import { appendWithinLimit, isBinaryFile, isInside } from "./file-helpers";
+import { runGit, type CapturedProcess } from "./git-process";
+import { failure, positiveInteger, RepositoryToolException, success } from "./tool-result";
 
 export interface RepositoryToolLimits {
   maxListEntries?: number;
@@ -79,135 +81,9 @@ const TEST_CONFIG_CANDIDATES = [
   "setup.cfg",
 ];
 
-class RepositoryToolException extends Error {
-  constructor(
-    readonly code: RepositoryToolErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RepositoryToolException";
-  }
-}
-
 interface ResolvedRepositoryPath {
   absolutePath: string;
   displayPath: string;
-}
-
-interface CapturedProcess {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
-}
-
-function success<T>(value: T): RepositoryToolResult<T> {
-  return { ok: true, value };
-}
-
-function failure(error: unknown): RepositoryToolResult<never> {
-  if (error instanceof RepositoryToolException) {
-    return { ok: false, error: { code: error.code, message: error.message } };
-  }
-  const detail = error instanceof Error ? error.message : String(error);
-  return { ok: false, error: { code: "IO_ERROR", message: detail } };
-}
-
-function isInside(root: string, candidate: string): boolean {
-  const pathFromRoot = relative(root, candidate);
-  return (
-    pathFromRoot === "" ||
-    (pathFromRoot !== ".." && !pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot))
-  );
-}
-
-function positiveInteger(value: number, name: string): number {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new RepositoryToolException("INVALID_ARGUMENT", `${name} must be a positive integer.`);
-  }
-  return value;
-}
-
-function byteLength(value: string): number {
-  return Buffer.byteLength(value, "utf8");
-}
-
-function appendWithinLimit(current: string, addition: string, limit: number): [string, boolean] {
-  const available = limit - byteLength(current);
-  if (available <= 0) return [current, true];
-  if (byteLength(addition) <= available) return [current + addition, false];
-  return [current + Buffer.from(addition).subarray(0, available).toString("utf8"), true];
-}
-
-async function isBinaryFile(path: string): Promise<boolean> {
-  const handle = await open(path, "r");
-  try {
-    const buffer = Buffer.alloc(8_192);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, bytesRead).includes(0);
-  } finally {
-    await handle.close();
-  }
-}
-
-async function captureStream(stream: ReadableStream<Uint8Array>, limit: number): Promise<{
-  text: string;
-  truncated: boolean;
-}> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytesKept = 0;
-  let truncated = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (bytesKept < limit) {
-      const remaining = limit - bytesKept;
-      const kept = value.subarray(0, remaining);
-      text += decoder.decode(kept, { stream: true });
-      bytesKept += kept.byteLength;
-      if (kept.byteLength < value.byteLength) truncated = true;
-    } else {
-      truncated = true;
-    }
-  }
-  text += decoder.decode();
-  return { text, truncated };
-}
-
-// Defence in depth: never run hooks or an fsmonitor command from repository config.
-const HARDENED_GIT_CONFIG = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"] as const;
-
-async function runGit(
-  root: string,
-  args: string[],
-  outputLimit: number,
-  gitDir: string | undefined,
-): Promise<CapturedProcess> {
-  const process = Bun.spawn(["git", ...HARDENED_GIT_CONFIG, ...args], {
-    cwd: root,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...Bun.env,
-      GIT_OPTIONAL_LOCKS: "0",
-      ...(gitDir === undefined ? {} : { GIT_DIR: gitDir, GIT_WORK_TREE: root }),
-    },
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    captureStream(process.stdout, outputLimit),
-    captureStream(process.stderr, outputLimit),
-    process.exited,
-  ]);
-  return {
-    exitCode,
-    stdout: stdout.text,
-    stderr: stderr.text,
-    truncated: stdout.truncated || stderr.truncated,
-  };
 }
 
 export class RepositoryTools {
