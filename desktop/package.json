@@ -6,9 +6,11 @@
     "backend": "bun run scripts/build-backend.ts",
     "web": "cd ../web && npm run build",
     "dev": "bun run backend && tauri dev",
-    "build": "bun run web && bun run backend && tauri build"
+    "build": "bun run web && bun run backend && tauri build",
+    "build:mac": "bun run web && bun run backend --universal && tauri build --target universal-apple-darwin --config src-tauri/tauri.release.conf.json",
+    "tauri": "tauri"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.9.6"
+    "@tauri-apps/cli": "2.12.4"
   }
 }

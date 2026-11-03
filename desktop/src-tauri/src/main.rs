@@ -5,10 +5,11 @@ use std::sync::Mutex;
 
 use serde::Deserialize;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 use url::Url;
 
 /// The ready line the backend prints once it listens (src/server/local-main.ts).
@@ -134,15 +135,69 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Stops the backend now rather than waiting for it to notice the closed pipe.
+fn stop_backend(app: &tauri::AppHandle) {
+    if let Some(backend) = app.try_state::<Backend>() {
+        if let Some(child) = backend.0.lock().unwrap().take() {
+            let _ = child.kill();
+        }
+    }
+}
+
+/// Asks once per launch whether to install a newer release. Offline, up to date, or a failed
+/// check all mean "try again next launch": a missing update must never stop the app opening.
+/// The update's signature is checked against the public key in tauri.conf.json before installing.
+fn check_for_update(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let Ok(updater) = app.updater() else { return };
+        let Ok(Some(update)) = updater.check().await else { return };
+        let message = format!(
+            "Caramel {} is available (you have {}).\n\nInstalling restarts Caramel and stops any run in progress.",
+            update.version, update.current_version
+        );
+        let handle = app.clone();
+        app.dialog()
+            .message(message)
+            .title("Update available")
+            .buttons(MessageDialogButtons::OkCancelCustom("Install and restart".into(), "Later".into()))
+            .show(move |install| {
+                if !install {
+                    return;
+                }
+                tauri::async_runtime::spawn(async move {
+                    match update.download_and_install(|_, _| {}, || {}).await {
+                        Ok(()) => {
+                            stop_backend(&handle);
+                            handle.restart();
+                        }
+                        Err(error) => {
+                            handle
+                                .dialog()
+                                .message(format!("The update could not be installed: {error}"))
+                                .title("Update failed")
+                                .kind(MessageDialogKind::Error)
+                                .show(|_| {});
+                        }
+                    }
+                });
+            });
+    });
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![pick_folder])
         .setup(|app| {
             if let Err(error) = start_backend(app.handle()) {
                 fail(app.handle(), format!("The backend could not be started: {error}"));
+            }
+            // Dev builds are not released, so there is nothing to update them to.
+            if !cfg!(debug_assertions) {
+                check_for_update(app.handle().clone());
             }
             Ok(())
         })
@@ -151,12 +206,7 @@ fn main() {
 
     app.run(|app, event| {
         if let RunEvent::Exit = event {
-            // A clean quit: stop the backend now rather than waiting for it to notice the closed pipe.
-            if let Some(backend) = app.try_state::<Backend>() {
-                if let Some(child) = backend.0.lock().unwrap().take() {
-                    let _ = child.kill();
-                }
-            }
+            stop_backend(app);
         }
     });
 }

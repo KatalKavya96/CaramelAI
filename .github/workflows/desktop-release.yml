@@ -1,0 +1,66 @@
+name: desktop-release
+
+# Builds, signs and notarizes the macOS app and drafts a GitHub release with the .dmg and the
+# updater feed (latest.json). Push a tag that matches the app version, e.g. `git tag v0.1.0`.
+# The release stays a draft until you publish it, and installed apps only see an update once
+# it is published, so test the draft's .dmg first.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      # The updater only installs a higher version, and a placeholder key would ship an app that
+      # can never verify an update. Both mistakes are cheap here and permanent once released.
+      - name: Check the tag and updater key
+        run: |
+          version=$(jq -r .version desktop/src-tauri/tauri.conf.json)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match version $version in tauri.conf.json"; exit 1; }
+          if grep -q REPLACE_WITH desktop/src-tauri/tauri.conf.json; then echo "Set plugins.updater.pubkey in tauri.conf.json"; exit 1; fi
+
+      - run: bun install --frozen-lockfile
+      - run: npm ci
+        working-directory: web
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run web && bun run backend --universal
+        working-directory: desktop
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Developer ID Application certificate, exported from Keychain Access as .p12, base64-encoded.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Notarization: your Apple ID, an app-specific password from account.apple.com, and team ID.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Signs the update itself, from `bun run tauri signer generate`. Different from the Apple certificate.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tauriScript: bun run tauri
+          args: --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
+          tagName: ${{ github.ref_name }}
+          releaseName: Caramel ${{ github.ref_name }}
+          releaseDraft: true
