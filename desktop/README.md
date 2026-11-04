@@ -75,6 +75,9 @@ Raise `version` in `src-tauri/tauri.conf.json` (the updater only installs a high
 commit `v<version>`, push the tag, download the draft's `.dmg` and open it on a Mac, then publish the
 release. The install script and in-app updates only see published releases.
 
+The app icon comes from `app-icon.png` (1024×1024, already shaped as a macOS rounded square). After
+changing it, run `bunx tauri icon app-icon.png` and keep only the files listed under `bundle.icon`.
+
 The backend's entitlements (`src-tauri/Entitlements.plist`) let Bun's JIT run under the hardened runtime.
 Users need `git` (macOS offers to install the command line tools the first time it runs). Docker is not
 needed on macOS: commands run in the built-in `sandbox-exec` sandbox.
