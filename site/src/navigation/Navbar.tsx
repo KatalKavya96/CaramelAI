@@ -21,7 +21,7 @@ const items = [
     links: [
       { label: "Get started", href: "#get-started" },
       { label: "Documentation", href: LINKS.docs },
-      { label: "Desktop updates", href: LINKS.notify },
+      { label: "Download for macOS", href: LINKS.download },
     ],
   },
   {

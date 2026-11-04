@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within, waitFor, act } from "@testing-librar
 import { Landing } from "../src/Landing";
 import { ProductPreview } from "../src/ProductPreview";
 import { SETUP_COMMAND } from "../src/experience/LandingOverlays";
-import { useUpdates, Updates } from "../src/experience/Updates";
+import { useUpdates, Updates, findDmg } from "../src/experience/Updates";
 
 beforeEach(() => {
   document.documentElement.dataset.theme = "dark";
@@ -116,5 +116,21 @@ describe("GitHub updates",()=>{
     render(<UpdateHarness/>);
     await act(async()=>{});
     expect(screen.getByText("Controller refactor")).toBeInTheDocument();
+  });
+  it("points downloads at the release page, then at the newest release's .dmg",async()=>{
+    const release={id:1,name:"Caramel v0.1.1",tag_name:"v0.1.1",published_at:"2026-11-10T00:00:00Z",html_url:"https://github.com/KatalKavya96/CaramelAI/releases/tag/v0.1.1",assets:[
+      {name:"Caramel_universal.app.tar.gz",browser_download_url:"https://github.com/KatalKavya96/CaramelAI/releases/download/v0.1.1/Caramel_universal.app.tar.gz"},
+      {name:"Caramel_0.1.1_universal.dmg",browser_download_url:"https://github.com/KatalKavya96/CaramelAI/releases/download/v0.1.1/Caramel_0.1.1_universal.dmg"},
+    ]};
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>[release]}));
+    render(<Landing/>);
+    const [first]=screen.getAllByRole("link",{name:/Download for macOS/});
+    expect(first).toHaveAttribute("href","https://github.com/KatalKavya96/CaramelAI/releases/latest");
+    await waitFor(()=>expect(first).toHaveAttribute("href","https://github.com/KatalKavya96/CaramelAI/releases/download/v0.1.1/Caramel_0.1.1_universal.dmg"));
+    expect(screen.getAllByText(/v0\.1\.1$/).length).toBeGreaterThan(0);
+  });
+  it("ignores a .dmg hosted anywhere but this repository's releases",()=>{
+    expect(findDmg({assets:[{name:"Caramel.dmg",browser_download_url:"https://example.com/Caramel.dmg"}]})).toBeUndefined();
+    expect(findDmg({})).toBeUndefined();
   });
 });
