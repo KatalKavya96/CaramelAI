@@ -1,6 +1,6 @@
 [package]
 name = "caramel-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Caramel desktop shell: starts the local backend and shows it in a native window"
 edition = "2021"
 
