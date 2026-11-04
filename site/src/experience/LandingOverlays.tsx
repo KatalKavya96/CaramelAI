@@ -10,7 +10,7 @@ export const SETUP_COMMAND = "git clone https://github.com/KatalKavya96/CaramelA
 export const KEY_COMMAND = 'export DEEPSEEK_API_KEY="your-provider-key"';
 const RUN_COMMAND = "make run";
 
-function CopyCommand({ code, label }: { code:string; label:string }) {
+export function CopyCommand({ code, label }: { code:string; label:string }) {
   const [status, setStatus] = useState<"idle"|"copied"|"failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -34,7 +34,7 @@ function QuickStart() {
       <li><span>02</span><div><h3>Connect your model</h3><p>This example uses DeepSeek. Replace the placeholder in your own terminal.</p><CopyCommand code={KEY_COMMAND} label="provider key command" /><a href={`${LINKS.docs.replace('#readme','')}/blob/main/.env.example`}>See provider configuration <span aria-hidden="true">↗</span></a></div></li>
       <li><span>03</span><div><h3>Run the guided setup</h3><p>Choose your repository, describe the task, and set the run budgets.</p><CopyCommand code={RUN_COMMAND} label="run command" /></div></li>
     </ol>
-    <div className={styles.drawerFooter}><a href={LINKS.docs}>Read the complete setup guide <ChevronRightIcon size={15} /></a><p>The desktop app is in development. <a href={LINKS.notify}>Follow releases</a>.</p></div>
+    <div className={styles.drawerFooter}><a href={LINKS.docs}>Read the complete setup guide <ChevronRightIcon size={15} /></a><p>Prefer an app? <a href={LINKS.download}>Download Caramel for macOS</a>.</p></div>
   </>;
 }
 
@@ -45,11 +45,12 @@ function CommandPalette({ openQuickStart,toggleTheme,theme,appearance,toggleAppe
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = "caramel-command-results";
   const commands = useMemo(() => [
+    {id:"download",label:"Download for macOS",hint:"Desktop app",keywords:"install dmg mac app desktop",href:"#get-started"},
     {id:"start",label:"Set up the CLI",hint:"Quick-start guide",keywords:"install cli setup run",action:openQuickStart},
     {id:"product",label:"Product demo",hint:"Try three example tasks",keywords:"preview bug refactor tests",href:"#product"},
     {id:"how",label:"How it works",hint:"From issue to evidence",keywords:"steps process",href:"#how"},
     {id:"example-replay",label:"Example runs",hint:"Verified and partial outcomes",keywords:"replay evidence",href:"#example-replay"},
-    {id:"updates",label:"What's new",hint:"Development updates",keywords:"release news changelog",href:"#updates"},
+    {id:"updates",label:"What's new",hint:"Releases and updates",keywords:"release news changelog",href:"#updates"},
     {id:"docs",label:"Documentation",hint:"Open on GitHub",keywords:"help readme",href:LINKS.docs},
     {id:"github",label:"GitHub repository",hint:"Explore the code",keywords:"source star",href:LINKS.github},
     {id:"theme",label:`Switch to ${theme === "dark" ? "light" : "dark"} theme`,hint:"Appearance",keywords:"mode color",action:()=>{toggleTheme();close();}},

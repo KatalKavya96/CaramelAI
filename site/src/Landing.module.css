@@ -93,3 +93,9 @@
 .workflowStrip { margin-top:38px; }
 .heroAction .ctaSecondary { margin-left:12px; }
 @media(max-width:600px){ .hero{padding-top:112px} .heroAction{display:flex;flex-wrap:wrap;justify-content:center;gap:12px} .heroAction .ctaSecondary{margin-left:0} .heroAction .hint{width:100%} }
+/* The desktop card carries the install command, so it is taller than its neighbours. */
+.startCards .desktopCard .installLabel { font-size:12px; color:var(--text-muted); margin:22px 0 8px; }
+.startCards .desktopCard .dmgNote { font-size:11px; line-height:1.6; color:var(--text-muted); margin-top:12px; max-width:none; }
+.desktopCard pre { white-space:pre-wrap !important; word-break:break-all; }
+.heroAction .cta, .heroAction .ctaSecondary { vertical-align:middle; }
+.heroAction button.ctaSecondary { background:none; font-family:inherit; cursor:pointer; }
